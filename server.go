@@ -66,7 +66,9 @@ func featureExtractor(maxFeatures int, mat gocv.Mat) gocv.Mat {
 		y := corners.GetFloatAt(f, 1)
 		// Using GetInt yields out of range results
 		point := image.Pt(int(x), int(y))
-		gocv.Circle(&mat, point, 4, red, 2)
+		go func(mat *gocv.Mat, pt image.Point) {
+			gocv.Circle(mat, point, 4, red, 2)
+		}(&mat, point)
 	}
 	return mat
 }

@@ -6,6 +6,9 @@ import "encoding/binary"
 import "io"
 import "gocv.io/x/gocv"
 
+import "image"
+import "image/color"
+
 func listen(imageChan chan []byte) {
 	l, err := net.Listen("tcp", ":8000")
 	if err != nil {
@@ -37,18 +40,35 @@ func LittleEndianStructHandler(c net.Conn, imageChan chan []byte) {
 		}
 		imageSize := binary.LittleEndian.Uint32(b)
 		// Read the little endian image
-		image := make([]byte, imageSize)
-		if err := binary.Read(c, binary.LittleEndian, &image); err != nil {
+		img := make([]byte, imageSize)
+		if err := binary.Read(c, binary.LittleEndian, &img); err != nil {
 			fmt.Println("little endian read failed", err)
 		} else {
-			imageChan <- image
+			imageChan <- img
 		}
 
 	}
 	c.Close()
 }
-func jpegToMat(image []byte) (gocv.Mat, error) {
-	return gocv.IMDecode(image, gocv.IMReadColor)
+func jpegToMat(img []byte) (gocv.Mat, error) {
+	return gocv.IMDecode(img, gocv.IMReadColor)
+}
+func featureExtractor(maxFeatures int, mat gocv.Mat) gocv.Mat {
+	// Required for tracking features
+	grayImage := gocv.NewMat()
+	gocv.CvtColor(mat, &grayImage, gocv.ColorBGRToGray)
+	red := color.RGBA{255, 100, 100, 90}
+	corners := gocv.NewMat()
+	gocv.GoodFeaturesToTrack(grayImage, &corners, maxFeatures, 0.01, 1.0)
+	// Corners is a 2 dim array [ [x,y]...]
+	for f := 0; f < maxFeatures; f++ {
+		x := corners.GetFloatAt(f, 0)
+		y := corners.GetFloatAt(f, 1)
+		// Using GetInt yields out of range results
+		point := image.Pt(int(x), int(y))
+		gocv.Circle(&mat, point, 4, red, 2)
+	}
+	return mat
 }
 
 // Demo: Accepts images over the wire in [4 byte len of image, imagebytes] format
@@ -57,12 +77,14 @@ func main() {
 	imageChan := make(chan []byte)
 	defer close(imageChan)
 	go listen(imageChan)
-	for image := range imageChan {
-		mat, err := jpegToMat(image)
+	for img := range imageChan {
+		mat, err := jpegToMat(img)
+		defer mat.Close()
 		if err != nil {
 			fmt.Println("unable to convert mat", err)
 			break
 		}
+		mat = featureExtractor(500, mat)
 		window.IMShow(mat)
 		if key := window.WaitKey(1); key == 113 { // 'q'
 			break

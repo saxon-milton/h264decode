@@ -5,13 +5,15 @@ import "net"
 import "encoding/binary"
 import "io"
 import "gocv.io/x/gocv"
+import "gocv.io/x/gocv/contrib"
 import "os"
 import "image"
 import "image/color"
 
 var (
-	blue = color.RGBA{0, 0, 255, 0}
-	red  = color.RGBA{255, 100, 100, 90}
+	blue  = color.RGBA{0, 0, 255, 0}
+	red   = color.RGBA{255, 100, 100, 90}
+	green = color.RGBA{100, 255, 100, 90}
 )
 
 func listen(imageChan chan []byte) {
@@ -78,7 +80,7 @@ func featureExtractor(maxFeatures int, mat gocv.Mat) []image.Point {
 }
 
 // Trackable descriptors are rectangles
-func detectTrackableFeatures(features []image.Point) []image.Rectangle {
+func featureRects(features []image.Point) []image.Rectangle {
 	rects := []image.Rectangle{}
 	for _, feature := range features {
 		// Create a 3x3 box
@@ -103,23 +105,73 @@ func circleFeatures(features []image.Point, mat gocv.Mat) gocv.Mat {
 
 }
 
+type FeatureTracker struct {
+	id      string
+	box     image.Rectangle
+	tracker contrib.Tracker
+}
+
+func trackerID(box image.Rectangle) string {
+	return fmt.Sprintf("%d.%d.%d.%d", box.Min.X, box.Min.Y, box.Max.X, box.Max.Y)
+}
+func trackFeatures(img gocv.Mat, features []image.Point, trackers []FeatureTracker) []FeatureTracker {
+	trackerIds := map[string]FeatureTracker{}
+	trackerCount := len(trackers)
+	for i := range trackers {
+		box, ok := trackers[i].tracker.Update(img)
+		if !ok {
+			fmt.Printf("removing dead tracker %s\n", trackers[i].id)
+			trackers = append(trackers[:i], trackers[i+1:]...)
+		} else {
+			id := trackerID(box)
+			fmt.Printf("updating tracker %s\n", id)
+			trackers[i].id = id
+			trackers[i].box = box
+			trackerIds[id] = trackers[i]
+			gocv.Rectangle(&img, box, blue, 3)
+		}
+	}
+	fmt.Printf("removed %d trackers\n", trackerCount-len(trackerIds))
+	rects := featureRects(features)
+	for _, box := range rects {
+		id := trackerID(box)
+		if _, ok := trackerIds[id]; !ok {
+			tracker := contrib.NewTrackerMOSSE()
+			defer tracker.Close()
+			fmt.Printf("new tracker %s\n", id)
+			trackerIds[id] = FeatureTracker{id, box, tracker}
+			gocv.Rectangle(&img, box, green, 3)
+		}
+	}
+	fmt.Printf("trackers grew by %d\n", len(trackerIds)-trackerCount)
+
+	return trackers
+}
+
 // Demo: Accepts images over the wire in [4 byte len of image, imagebytes] format
 func main() {
 	window := gocv.NewWindow("images")
 	imageChan := make(chan []byte)
 	defer close(imageChan)
 	go listen(imageChan)
-	for img := range imageChan {
-		mat, err := jpegToMat(img)
-		defer mat.Close()
+	var imgCounter int64
+	for imgBytes := range imageChan {
+		imgCounter++
+		fmt.Println("img", imgCounter)
+		img, err := jpegToMat(imgBytes)
+		defer img.Close()
 		if err != nil {
-			fmt.Println("unable to convert mat", err)
+			fmt.Println("unable to convert img", err)
 			break
 		}
-		features := featureExtractor(500, mat)
-		mat = circleFeatures(features, mat)
+		features := featureExtractor(500, img)
+		// img = circleFeatures(features, img)
+		trackers := trackFeatures(img, features, []FeatureTracker{})
 		// Compute descriptors
-		window.IMShow(mat)
+		if imgCounter > 20 {
+			trackers = trackFeatures(img, features, trackers)
+		}
+		window.IMShow(img)
 		if key := window.WaitKey(1); key == 113 { // 'q'
 			break
 

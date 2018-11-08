@@ -5,10 +5,11 @@ import "net"
 import "encoding/binary"
 import "io"
 import "gocv.io/x/gocv"
-import "gocv.io/x/gocv/contrib"
 import "os"
 import "image"
 import "image/color"
+
+// import "sort"
 
 var (
 	blue  = color.RGBA{0, 0, 255, 0}
@@ -36,6 +37,7 @@ func listen(imageChan chan []byte) {
 
 // LittleEndianStructHandler Read little endian packed Python struct
 func LittleEndianStructHandler(c net.Conn, imageChan chan []byte) {
+	defer c.Close()
 	for {
 		// Read the size of the image in bytes being sent
 		b := make([]byte, 4)
@@ -57,7 +59,6 @@ func LittleEndianStructHandler(c net.Conn, imageChan chan []byte) {
 		}
 
 	}
-	c.Close()
 }
 func jpegToMat(img []byte) (gocv.Mat, error) {
 	return gocv.IMDecode(img, gocv.IMReadColor)
@@ -65,8 +66,10 @@ func jpegToMat(img []byte) (gocv.Mat, error) {
 func featureExtractor(maxFeatures int, mat gocv.Mat) []image.Point {
 	// Required for tracking features
 	grayImage := gocv.NewMat()
+	defer grayImage.Close()
 	gocv.CvtColor(mat, &grayImage, gocv.ColorBGRToGray)
 	corners := gocv.NewMat()
+	defer corners.Close()
 	gocv.GoodFeaturesToTrack(grayImage, &corners, maxFeatures, 0.01, 1.0)
 	// Corners is a 2 dim array [ [x,y]...]
 	points := []image.Point{}
@@ -79,22 +82,6 @@ func featureExtractor(maxFeatures int, mat gocv.Mat) []image.Point {
 	return points
 }
 
-// Trackable descriptors are rectangles
-func featureRects(features []image.Point) []image.Rectangle {
-	rects := []image.Rectangle{}
-	for _, feature := range features {
-		// Create a 3x3 box
-		r := image.Rect(
-			feature.X-1,
-			feature.Y-1,
-			feature.X+1,
-			feature.Y+1)
-		rects = append(rects, r)
-	}
-
-	return rects
-}
-
 func circleFeatures(features []image.Point, mat gocv.Mat) gocv.Mat {
 	for _, feature := range features {
 		go func(mat *gocv.Mat, pt image.Point) {
@@ -105,56 +92,26 @@ func circleFeatures(features []image.Point, mat gocv.Mat) gocv.Mat {
 
 }
 
-type FeatureTracker struct {
-	id      string
-	box     image.Rectangle
-	tracker contrib.Tracker
-}
+func keyPointsAndDescriptors(img gocv.Mat) ([]gocv.KeyPoint, gocv.Mat) {
 
-func trackerID(box image.Rectangle) string {
-	return fmt.Sprintf("%d.%d.%d.%d", box.Min.X, box.Min.Y, box.Max.X, box.Max.Y)
-}
-func trackFeatures(img gocv.Mat, features []image.Point, trackers []FeatureTracker) []FeatureTracker {
-	trackerIds := map[string]FeatureTracker{}
-	trackerCount := len(trackers)
-	for i := range trackers {
-		box, ok := trackers[i].tracker.Update(img)
-		if !ok {
-			fmt.Printf("removing dead tracker %s\n", trackers[i].id)
-			trackers = append(trackers[:i], trackers[i+1:]...)
-		} else {
-			id := trackerID(box)
-			fmt.Printf("updating tracker %s\n", id)
-			trackers[i].id = id
-			trackers[i].box = box
-			trackerIds[id] = trackers[i]
-			gocv.Rectangle(&img, box, blue, 3)
-		}
-	}
-	fmt.Printf("removed %d trackers\n", trackerCount-len(trackerIds))
-	rects := featureRects(features)
-	for _, box := range rects {
-		id := trackerID(box)
-		if _, ok := trackerIds[id]; !ok {
-			tracker := contrib.NewTrackerMOSSE()
-			defer tracker.Close()
-			fmt.Printf("new tracker %s\n", id)
-			trackerIds[id] = FeatureTracker{id, box, tracker}
-			gocv.Rectangle(&img, box, green, 3)
-		}
-	}
-	fmt.Printf("trackers grew by %d\n", len(trackerIds)-trackerCount)
+	// In frame a, then b
+	orb := gocv.NewORB()
+	defer orb.Close()
 
-	return trackers
+	m := gocv.NewMat()
+	defer m.Close()
+	return orb.DetectAndCompute(img, m)
 }
 
 // Demo: Accepts images over the wire in [4 byte len of image, imagebytes] format
 func main() {
 	window := gocv.NewWindow("images")
+	defer window.Close()
 	imageChan := make(chan []byte)
 	defer close(imageChan)
 	go listen(imageChan)
 	var imgCounter int64
+	lastImage := []gocv.Mat{}
 	for imgBytes := range imageChan {
 		imgCounter++
 		fmt.Println("img", imgCounter)
@@ -164,14 +121,64 @@ func main() {
 			fmt.Println("unable to convert img", err)
 			break
 		}
-		features := featureExtractor(500, img)
-		// img = circleFeatures(features, img)
-		trackers := trackFeatures(img, features, []FeatureTracker{})
-		// Compute descriptors
-		if imgCounter > 20 {
-			trackers = trackFeatures(img, features, trackers)
+		// Newest frame always at head
+		if imgCounter > 5 {
+			if len(lastImage) < 1 {
+				lastImage = append(lastImage, img)
+				continue
+			}
+			akps, ades := keyPointsAndDescriptors(img)
+			// Annotate image
+			// With a keypoint, a high octave means more de-res, 0 is hi-res > 0 is lessening
+			// The keypoint gives the center of the keypoint circular region
+			// The scale is the diameter of the region, and angle in radians, the orientation
+			for i, kp := range akps {
+				if i == 10 {
+					fmt.Printf("Keypoint at %2f, %2f\n", kp.X, kp.Y)
+				}
+				pt := image.Pt(int(kp.X), int(kp.Y))
+				gocv.Circle(&img, pt, 2, blue, 1)
+			}
+			window.IMShow(img)
+			bkps, bdes := keyPointsAndDescriptors(lastImage[0])
+			fmt.Printf("A kps %d, B kps %d\n", len(akps), len(bkps))
+			/*
+				if len(akps) > 0 && len(bkps) > 0 {
+					sa := sortableKeyPoints{akps}
+					sort.Sort(sa)
+					sb := sortableKeyPoints{bkps}
+					sort.Sort(sb)
+					// TODO: Create rectangles from the keypoints
+					fmt.Printf("A kps0: %#v\nB kps0: %#v\n", sa.kps[0], sb.kps[0])
+				}
+			*/
+			lastImage[0].Close()
+			lastImage[0] = img
+			bf := gocv.NewBFMatcher()
+			// Query, train, points
+			dmatch := bf.KnnMatch(bdes, ades, 10)
+			if len(dmatch) > 0 {
+				fmt.Printf("matches %d by %d\n", len(dmatch), len(dmatch[0]))
+				fmt.Printf("bdes %#v\n", bdes.Size())
+				for row := bdes.Rows() - 3; row < bdes.Rows(); row++ {
+					fmt.Println("Descriptors ", row)
+					for col := bdes.Cols() - 3; col < bdes.Cols(); col++ {
+						fmt.Printf("\t%d,%d: %2f\n", col, row, bdes.GetFloatAt(row, col))
+					}
+				}
+				// fmt.Printf("d bdes %d, %d\n", bdes.Cols(), bdes.Rows())
+				// fmt.Printf("Type %#v Total %#v\n", bdes.Type(), bdes.Total())
+				// Each dmatch has the QueryIdx and TrainIdx for finding keypoints
+				// The number of dmatch rows is the lesser keypoints set size
+				// The number of columns matches our requested terms
+				// Finding the smaller *kps set
+			}
+			// deferred .Close() was causing memory leak
+			ades.Close()
+			bdes.Close()
+			bf.Close()
 		}
-		window.IMShow(img)
+
 		if key := window.WaitKey(1); key == 113 { // 'q'
 			break
 

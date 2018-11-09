@@ -8,8 +8,7 @@ import "gocv.io/x/gocv"
 import "os"
 import "image"
 import "image/color"
-
-// import "sort"
+import "time"
 
 var (
 	blue  = color.RGBA{0, 0, 255, 0}
@@ -17,7 +16,9 @@ var (
 	green = color.RGBA{100, 255, 100, 0}
 )
 
-const MaxArea = 1000
+// 24k is within a few feet for a full sized human
+const MaxArea = 24000
+const MinArea = 200
 
 func listen(imageChan chan []byte) {
 	fmt.Println("Starting listener")
@@ -120,14 +121,80 @@ func dropLowKeyPoints(kps []gocv.KeyPoint) []gocv.KeyPoint {
 	return hqkps
 
 }
+func writeLog(area float64) {
+
+	f, err := os.OpenFile("events.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("error opening log: %v\n", err)
+	}
+	defer f.Close()
+	_, err = f.WriteString(fmt.Sprintf("%v: %2f sized object \n", time.Now(), area))
+	if err != nil {
+		fmt.Printf("error writing entry: %v\n", err)
+	}
+}
+func videoWriter(imchan chan gocv.Mat, donechan chan int) {
+	fmt.Printf("video writer waiting...\n")
+	var vw *gocv.VideoWriter
+	var err error
+	var filename string
+	setupWriter := func() {
+		filename = time.Now().Format(time.RFC3339) + ".avi"
+		fps := 2.0
+		vw, err = gocv.VideoWriterFile(filename, "MJPG", fps, 640, 480, true)
+		if err != nil {
+			fmt.Printf("unable to start video writer %s: %v\n", filename, vw)
+			return
+		}
+	}
+	setupWriter()
+	defer vw.Close()
+	frame := 0
+	for {
+		select {
+		case img := <-imchan:
+			fmt.Printf("%d,%d\n", img.Cols(), img.Rows())
+			/*
+				im, err := img.ToImage()
+				if err != nil {
+					fmt.Printf("unable to convert image to im: %v\n", err)
+					continue
+				}
+			*/
+			fmt.Println("writing frame")
+			if err := vw.Write(img); err != nil {
+				fmt.Printf("failed to write frame %d\n", frame)
+			}
+			frame++
+		case <-donechan:
+			if frame > 1 {
+				frame = 0
+				fmt.Println("closing file:", filename)
+				vw.Close()
+				setupWriter()
+			}
+		}
+	}
+
+}
+
 func motionDetector(window *gocv.Window, imchan chan gocv.Mat) {
 	fmt.Printf("motion detector launched...\n")
 	mog2 := gocv.NewBackgroundSubtractorMOG2()
+	// Interesting should be true until a timer expires without it being refreshed
+	sinceInteresting := 100
+	videochan := make(chan gocv.Mat)
+	closevideochan := make(chan int)
+	go videoWriter(videochan, closevideochan)
 	for img := range imchan {
-
 		if img.Empty() {
 			img.Close()
 			continue
+		}
+		if sinceInteresting < 10 {
+			videochan <- img
+		} else {
+			closevideochan <- 1
 		}
 
 		// Work off a smaller gray image
@@ -152,16 +219,21 @@ func motionDetector(window *gocv.Window, imchan chan gocv.Mat) {
 
 		// now find contours
 		contours := gocv.FindContours(imgThresh, gocv.RetrievalExternal, gocv.ChainApproxSimple)
+
 		for i, c := range contours {
 			area := gocv.ContourArea(c)
-			if area < MaxArea {
+			if area < MinArea || area > MaxArea {
+				sinceInteresting++
 				continue
 			}
-
+			// image is about 30,000
+			writeLog(area)
 			gocv.DrawContours(&img, contours, i, red, 2)
 
 			rect := gocv.BoundingRect(c)
 			gocv.Rectangle(&img, rect, blue, 2)
+			sinceInteresting = 0
+
 		}
 		window.IMShow(img)
 		window.WaitKey(1)
@@ -190,79 +262,6 @@ func main() {
 		img, err := jpegToMat(imgBytes)
 		if err == nil {
 			imstream <- img
-		}
-	}
-}
-
-// Demo: Accepts images over the wire in [4 byte len of image, imagebytes] format
-func keypointDetector(window *gocv.Window, imchan chan gocv.Mat) {
-	var imgCounter int64
-	for img := range imchan {
-		lastImage := []gocv.Mat{}
-		window.IMShow(img)
-		window.WaitKey(10)
-		img.Close()
-		// Newest frame always at head
-		if imgCounter > 5 {
-			if len(lastImage) < 1 {
-				lastImage = append(lastImage, img)
-				continue
-			}
-			// The descriptor will be n matches by 32 descriptor bits
-			akps, ades := keyPointsAndDescriptors(img)
-			akps = dropLowKeyPoints(akps)
-			fmt.Printf("retained %d keypoints\n", len(akps))
-			// Annotate image
-			// With a keypoint, a high octave means more de-res, 0 is hi-res > 0 is lessening
-			// The keypoint gives the center of the keypoint circular region
-			// The scale is the diameter of the region, and angle in radians, the orientation
-			drawKeypoints := func(kps []gocv.KeyPoint, c color.RGBA) {
-				for _, kp := range kps {
-					pt := image.Pt(int(kp.X), int(kp.Y))
-					gocv.Circle(&img, pt, 2, c, 1)
-				}
-			}
-			bkps, bdes := keyPointsAndDescriptors(lastImage[0])
-			bkps = dropLowKeyPoints(bkps)
-			drawKeypoints(akps, blue)
-			drawKeypoints(bkps, green)
-			window.IMShow(img)
-			fmt.Printf("A kps %d, B kps %d\n", len(akps), len(bkps))
-			/*
-				if len(akps) > 0 && len(bkps) > 0 {
-					sa := sortableKeyPoints{akps}
-					sort.Sort(sa)
-					sb := sortableKeyPoints{bkps}
-					sort.Sort(sb)
-					// TODO: Create rectangles from the keypoints
-					fmt.Printf("A kps0: %#v\nB kps0: %#v\n", sa.kps[0], sb.kps[0])
-				}
-			*/
-			lastImage[0].Close()
-			lastImage[0] = img
-			bf := gocv.NewBFMatcher()
-			// Query, train, points
-			dmatch := bf.KnnMatch(bdes, ades, 10)
-			if len(dmatch) > 0 {
-				// Descriptors by 32-bytes (256 bit) descriptor (see BRIEF-32 descriptor)
-				//			fmt.Printf("matches %d by %d\n", len(dmatch), len(dmatch[0]))
-				//			fmt.Printf("bdes %#v\n", bdes.Size())
-				// fmt.Printf("d bdes %d, %d\n", bdes.Cols(), bdes.Rows())
-				// fmt.Printf("Type %#v Total %#v\n", bdes.Type(), bdes.Total())
-				// Each dmatch has the QueryIdx and TrainIdx for finding keypoints
-				// The number of dmatch rows is the lesser keypoints set size
-				// The number of columns matches our requested terms
-				// Finding the smaller *kps set
-			}
-			// deferred .Close() was causing memory leak
-			ades.Close()
-			bdes.Close()
-			bf.Close()
-		}
-
-		if key := window.WaitKey(100); key == 113 { // 'q'
-			break
-
 		}
 	}
 }

@@ -13,9 +13,11 @@ import "image/color"
 
 var (
 	blue  = color.RGBA{0, 0, 255, 0}
-	red   = color.RGBA{255, 100, 100, 90}
-	green = color.RGBA{100, 255, 100, 90}
+	red   = color.RGBA{255, 100, 100, 0}
+	green = color.RGBA{100, 255, 100, 0}
 )
+
+const MaxArea = 1000
 
 func listen(imageChan chan []byte) {
 	fmt.Println("Starting listener")
@@ -103,44 +105,128 @@ func keyPointsAndDescriptors(img gocv.Mat) ([]gocv.KeyPoint, gocv.Mat) {
 	return orb.DetectAndCompute(img, m)
 }
 
-// Demo: Accepts images over the wire in [4 byte len of image, imagebytes] format
+func dropLowKeyPoints(kps []gocv.KeyPoint) []gocv.KeyPoint {
+	hqkps := []gocv.KeyPoint{}
+	minOctave := 100
+	for _, kp := range kps {
+		if kp.Octave < minOctave {
+			minOctave = kp.Octave
+		}
+		// 50% derez at 1
+		if kp.Octave < 1 {
+			hqkps = append(hqkps, kp)
+		}
+	}
+	return hqkps
+
+}
+func motionDetector(window *gocv.Window, imchan chan gocv.Mat) {
+	fmt.Printf("motion detector launched...\n")
+	mog2 := gocv.NewBackgroundSubtractorMOG2()
+	for img := range imchan {
+
+		if img.Empty() {
+			img.Close()
+			continue
+		}
+
+		// Work off a smaller gray image
+		grayImage := gocv.NewMat()
+		gocv.CvtColor(img, &grayImage, gocv.ColorBGRToGray)
+		fgMask := gocv.NewMat()
+		imgThresh := gocv.NewMat()
+
+		// first phase of cleaning up image, obtain foreground only
+		mog2.Apply(grayImage, &fgMask)
+
+		// remaining cleanup of the image to use for finding contours.
+		// first use threshold
+		// gocv.Threshold(fgMask, &imgThresh, 25, 255, gocv.ThresholdBinary)
+		// AdaptiveThresholdMean=0, Gaussian1
+		blockSize := 255 // %2 == 1
+		gocv.AdaptiveThreshold(fgMask, &imgThresh, 255, gocv.AdaptiveThresholdGaussian, gocv.ThresholdBinary, blockSize, 2)
+
+		// then dilate
+		kernel := gocv.GetStructuringElement(gocv.MorphRect, image.Pt(3, 3))
+		gocv.Dilate(imgThresh, &imgThresh, kernel)
+
+		// now find contours
+		contours := gocv.FindContours(imgThresh, gocv.RetrievalExternal, gocv.ChainApproxSimple)
+		for i, c := range contours {
+			area := gocv.ContourArea(c)
+			if area < MaxArea {
+				continue
+			}
+
+			gocv.DrawContours(&img, contours, i, red, 2)
+
+			rect := gocv.BoundingRect(c)
+			gocv.Rectangle(&img, rect, blue, 2)
+		}
+		window.IMShow(img)
+		window.WaitKey(1)
+		kernel.Close()
+		imgThresh.Close()
+		fgMask.Close()
+		grayImage.Close()
+		img.Close()
+	}
+	mog2.Close()
+
+}
 func main() {
 	window := gocv.NewWindow("images")
 	defer window.Close()
-	imageChan := make(chan []byte)
-	defer close(imageChan)
-	go listen(imageChan)
-	var imgCounter int64
-	lastImage := []gocv.Mat{}
-	for imgBytes := range imageChan {
-		imgCounter++
-		fmt.Println("img", imgCounter)
+	// Open imagestream
+	imstream := make(chan gocv.Mat)
+	defer close(imstream)
+	go motionDetector(window, imstream)
+	// Start bystream
+	bytestream := make(chan []byte)
+	defer close(bytestream)
+	go listen(bytestream)
+
+	for imgBytes := range bytestream {
 		img, err := jpegToMat(imgBytes)
-		defer img.Close()
-		if err != nil {
-			fmt.Println("unable to convert img", err)
-			break
+		if err == nil {
+			imstream <- img
 		}
+	}
+}
+
+// Demo: Accepts images over the wire in [4 byte len of image, imagebytes] format
+func keypointDetector(window *gocv.Window, imchan chan gocv.Mat) {
+	var imgCounter int64
+	for img := range imchan {
+		lastImage := []gocv.Mat{}
+		window.IMShow(img)
+		window.WaitKey(10)
+		img.Close()
 		// Newest frame always at head
 		if imgCounter > 5 {
 			if len(lastImage) < 1 {
 				lastImage = append(lastImage, img)
 				continue
 			}
+			// The descriptor will be n matches by 32 descriptor bits
 			akps, ades := keyPointsAndDescriptors(img)
+			akps = dropLowKeyPoints(akps)
+			fmt.Printf("retained %d keypoints\n", len(akps))
 			// Annotate image
 			// With a keypoint, a high octave means more de-res, 0 is hi-res > 0 is lessening
 			// The keypoint gives the center of the keypoint circular region
 			// The scale is the diameter of the region, and angle in radians, the orientation
-			for i, kp := range akps {
-				if i == 10 {
-					fmt.Printf("Keypoint at %2f, %2f\n", kp.X, kp.Y)
+			drawKeypoints := func(kps []gocv.KeyPoint, c color.RGBA) {
+				for _, kp := range kps {
+					pt := image.Pt(int(kp.X), int(kp.Y))
+					gocv.Circle(&img, pt, 2, c, 1)
 				}
-				pt := image.Pt(int(kp.X), int(kp.Y))
-				gocv.Circle(&img, pt, 2, blue, 1)
 			}
-			window.IMShow(img)
 			bkps, bdes := keyPointsAndDescriptors(lastImage[0])
+			bkps = dropLowKeyPoints(bkps)
+			drawKeypoints(akps, blue)
+			drawKeypoints(bkps, green)
+			window.IMShow(img)
 			fmt.Printf("A kps %d, B kps %d\n", len(akps), len(bkps))
 			/*
 				if len(akps) > 0 && len(bkps) > 0 {
@@ -158,14 +244,9 @@ func main() {
 			// Query, train, points
 			dmatch := bf.KnnMatch(bdes, ades, 10)
 			if len(dmatch) > 0 {
-				fmt.Printf("matches %d by %d\n", len(dmatch), len(dmatch[0]))
-				fmt.Printf("bdes %#v\n", bdes.Size())
-				for row := bdes.Rows() - 3; row < bdes.Rows(); row++ {
-					fmt.Println("Descriptors ", row)
-					for col := bdes.Cols() - 3; col < bdes.Cols(); col++ {
-						fmt.Printf("\t%d,%d: %2f\n", col, row, bdes.GetFloatAt(row, col))
-					}
-				}
+				// Descriptors by 32-bytes (256 bit) descriptor (see BRIEF-32 descriptor)
+				//			fmt.Printf("matches %d by %d\n", len(dmatch), len(dmatch[0]))
+				//			fmt.Printf("bdes %#v\n", bdes.Size())
 				// fmt.Printf("d bdes %d, %d\n", bdes.Cols(), bdes.Rows())
 				// fmt.Printf("Type %#v Total %#v\n", bdes.Type(), bdes.Total())
 				// Each dmatch has the QueryIdx and TrainIdx for finding keypoints
@@ -179,7 +260,7 @@ func main() {
 			bf.Close()
 		}
 
-		if key := window.WaitKey(1); key == 113 { // 'q'
+		if key := window.WaitKey(100); key == 113 { // 'q'
 			break
 
 		}

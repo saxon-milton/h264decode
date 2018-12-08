@@ -17,3 +17,11 @@ Night animals have a slight reflective coating to their eyes, this would be one 
 ## Detecting Humans
 
 Humans come with and without flashlights. Humans with flashlights are kind of like slow moving cars. Humans without lflashlights are tall vertical animals.
+
+## Camera Notes
+
+* AWB gains are in the (315/256, 90/64) in the late afternoon at the North side of the house (15:00 2018/12/07)
+* Framerate of 40 seems stable
+* AWB gains are in the (197/128, 163/128) range in the early twilight at the North side of the house (16:30 2018/12/07)
+
+

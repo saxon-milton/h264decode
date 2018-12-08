@@ -1,24 +1,43 @@
 package main
 
-import "fmt"
-import "net"
-import "encoding/binary"
-import "io"
-import "gocv.io/x/gocv"
-import "os"
-import "image"
-import "image/color"
-import "time"
+import (
+	"encoding/binary"
+	"fmt"
+	"gocv.io/x/gocv"
+	"image"
+	"image/color"
+	"io"
+	"net"
+	"os"
+	"strings"
+	"time"
+)
 
 var (
-	blue  = color.RGBA{0, 0, 255, 0}
-	red   = color.RGBA{255, 100, 100, 0}
-	green = color.RGBA{100, 255, 100, 0}
+	blue       = color.RGBA{0, 0, 255, 0}
+	red        = color.RGBA{255, 100, 100, 0}
+	green      = color.RGBA{100, 255, 100, 0}
+	saveVideos = true
 )
 
 // 24k is within a few feet for a full sized human
 const MaxArea = 24000
 const MinArea = 200
+
+func parseArgs() {
+	if len(os.Args) > 1 {
+		switch strings.ToLower(os.Args[1]) {
+		case "nosave":
+			saveVideos = false
+		case "help":
+			fmt.Printf("%s [nosave|help]\n", os.Args[0])
+			os.Exit(0)
+		}
+	}
+}
+func timestamp() string {
+	return time.Now().Format("2006.01.02_150405")
+}
 
 func listen(imageChan chan []byte) {
 	fmt.Println("Starting listener")
@@ -56,7 +75,7 @@ func LittleEndianStructHandler(c net.Conn, imageChan chan []byte) {
 		// Read the little endian image
 		img := make([]byte, imageSize)
 		if err := binary.Read(c, binary.LittleEndian, &img); err != nil {
-			fmt.Println("little endian read failed", err)
+			fmt.Println("%s: error little endian read failed %v\n", timestamp(), err)
 		} else {
 			imageChan <- img
 		}
@@ -125,12 +144,12 @@ func writeLog(area float64) {
 
 	f, err := os.OpenFile("events.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Printf("error opening log: %v\n", err)
+		fmt.Printf("%s: error opening log: %v\n", timestamp(), err)
 	}
 	defer f.Close()
 	_, err = f.WriteString(fmt.Sprintf("%v: %2f sized object \n", time.Now(), area))
 	if err != nil {
-		fmt.Printf("error writing entry: %v\n", err)
+		fmt.Printf("%s: error writing entry: %v\n", timestamp(), err)
 	}
 }
 func videoWriter(imchan chan gocv.Mat, donechan chan int) {
@@ -143,7 +162,7 @@ func videoWriter(imchan chan gocv.Mat, donechan chan int) {
 		fps := 2.0
 		vw, err = gocv.VideoWriterFile(filename, "MJPG", fps, 640, 480, true)
 		if err != nil {
-			fmt.Printf("unable to start video writer %s: %v\n", filename, vw)
+			fmt.Printf("%s: error unable to start video writer %s: %v\n", timestamp(), filename, err)
 			return
 		}
 	}
@@ -153,7 +172,10 @@ func videoWriter(imchan chan gocv.Mat, donechan chan int) {
 	for {
 		select {
 		case img := <-imchan:
-			fmt.Printf("%d,%d\n", img.Cols(), img.Rows())
+			if !saveVideos {
+				continue
+			}
+
 			/*
 				im, err := img.ToImage()
 				if err != nil {
@@ -161,9 +183,8 @@ func videoWriter(imchan chan gocv.Mat, donechan chan int) {
 					continue
 				}
 			*/
-			fmt.Println("writing frame")
 			if err := vw.Write(img); err != nil {
-				fmt.Printf("failed to write frame %d\n", frame)
+				fmt.Printf("[%s] failed to write frame %d: %v\n", filename, frame, err)
 			}
 			frame++
 		case <-donechan:
@@ -247,6 +268,7 @@ func motionDetector(window *gocv.Window, imchan chan gocv.Mat) {
 
 }
 func main() {
+	parseArgs()
 	window := gocv.NewWindow("images")
 	defer window.Close()
 	// Open imagestream

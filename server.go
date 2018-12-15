@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/binary"
+	"flag"
 	"fmt"
 	"gocv.io/x/gocv"
 	"image"
@@ -9,7 +10,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"strings"
 	"time"
 )
 
@@ -24,16 +24,10 @@ var (
 const MaxArea = 24000
 const MinArea = 200
 
-func parseArgs() {
-	if len(os.Args) > 1 {
-		switch strings.ToLower(os.Args[1]) {
-		case "nosave":
-			saveVideos = false
-		case "help":
-			fmt.Printf("%s [nosave|help]\n", os.Args[0])
-			os.Exit(0)
-		}
-	}
+func init() {
+	flag.BoolVar(&saveVideos, "save", true, "Save images when motion is detected")
+	flag.Parse()
+	fmt.Printf("Save videos? %v\n", saveVideos)
 }
 func timestamp() string {
 	return time.Now().Format("2006.01.02_150405")
@@ -268,7 +262,7 @@ func motionDetector(window *gocv.Window, imchan chan gocv.Mat) {
 
 }
 func main() {
-	parseArgs()
+	fmt.Println("Starting server...")
 	window := gocv.NewWindow("images")
 	defer window.Close()
 	// Open imagestream

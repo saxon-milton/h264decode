@@ -10,14 +10,16 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"time"
 )
 
 var (
-	blue       = color.RGBA{0, 0, 255, 0}
-	red        = color.RGBA{255, 100, 100, 0}
-	green      = color.RGBA{100, 255, 100, 0}
-	saveVideos = true
+	blue          = color.RGBA{0, 0, 255, 0}
+	red           = color.RGBA{255, 100, 100, 0}
+	green         = color.RGBA{100, 255, 100, 0}
+	saveVideos    = true
+	motionEventId = 0
 )
 
 // 24k is within a few feet for a full sized human
@@ -134,18 +136,6 @@ func dropLowKeyPoints(kps []gocv.KeyPoint) []gocv.KeyPoint {
 	return hqkps
 
 }
-func writeLog(area float64) {
-
-	f, err := os.OpenFile("events.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		fmt.Printf("%s: error opening log: %v\n", timestamp(), err)
-	}
-	defer f.Close()
-	_, err = f.WriteString(fmt.Sprintf("%v: %2f sized object \n", time.Now(), area))
-	if err != nil {
-		fmt.Printf("%s: error writing entry: %v\n", timestamp(), err)
-	}
-}
 func videoWriter(imchan chan gocv.Mat, donechan chan int) {
 	fmt.Printf("video writer waiting...\n")
 	var vw *gocv.VideoWriter
@@ -153,7 +143,8 @@ func videoWriter(imchan chan gocv.Mat, donechan chan int) {
 	var filename string
 	setupWriter := func() {
 		filename = time.Now().Format(time.RFC3339) + ".avi"
-		fps := 2.0
+		fps := 40.0
+		fmt.Printf("%d opened %s for writing @ %2f fps\n", motionEventId, filename, fps)
 		vw, err = gocv.VideoWriterFile(filename, "MJPG", fps, 640, 480, true)
 		if err != nil {
 			fmt.Printf("%s: error unable to start video writer %s: %v\n", timestamp(), filename, err)
@@ -170,13 +161,6 @@ func videoWriter(imchan chan gocv.Mat, donechan chan int) {
 				continue
 			}
 
-			/*
-				im, err := img.ToImage()
-				if err != nil {
-					fmt.Printf("unable to convert image to im: %v\n", err)
-					continue
-				}
-			*/
 			if err := vw.Write(img); err != nil {
 				fmt.Printf("[%s] failed to write frame %d: %v\n", filename, frame, err)
 			}
@@ -192,6 +176,37 @@ func videoWriter(imchan chan gocv.Mat, donechan chan int) {
 	}
 
 }
+func elementList(floats []float64) string {
+	elements := []string{}
+	for _, n := range floats {
+		elements = append(elements, fmt.Sprintf("%2f", n))
+	}
+	return strings.Join(elements, ",")
+}
+
+// Log the dimensions of the motion event
+func writeMotionEventLog(timestamp string, eventId, sinceInteresting int, motionAreaRegions, inactiveRegion []float64) {
+	// Careful, this will overwrite logs
+	eventLog := fmt.Sprintf("event_%d.log", eventId)
+	f, err := os.OpenFile(eventLog, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		fmt.Printf("%s: error opening log: %v\n", eventLog, err)
+	}
+	defer f.Close()
+
+	f.WriteString(fmt.Sprintf("motionRegion, %s, %d, %d, %d, %s\n",
+		timestamp,
+		eventId,
+		sinceInteresting,
+		len(motionAreaRegions),
+		elementList(motionAreaRegions)))
+	f.WriteString(fmt.Sprintf("undersizedRegion, %s, %d, %d, %d, %s\n",
+		timestamp,
+		eventId,
+		sinceInteresting,
+		len(inactiveRegion),
+		elementList(inactiveRegion)))
+}
 
 func motionDetector(window *gocv.Window, imchan chan gocv.Mat) {
 	fmt.Printf("motion detector launched...\n")
@@ -206,12 +221,7 @@ func motionDetector(window *gocv.Window, imchan chan gocv.Mat) {
 			img.Close()
 			continue
 		}
-		if sinceInteresting < 10 {
-			videochan <- img
-		} else {
-			closevideochan <- 1
-		}
-
+		timestamp := time.Now().Format("2006.01.02T150405")
 		// Work off a smaller gray image
 		grayImage := gocv.NewMat()
 		gocv.CvtColor(img, &grayImage, gocv.ColorBGRToGray)
@@ -234,15 +244,18 @@ func motionDetector(window *gocv.Window, imchan chan gocv.Mat) {
 
 		// now find contours
 		contours := gocv.FindContours(imgThresh, gocv.RetrievalExternal, gocv.ChainApproxSimple)
-
+		// object size of detected motion
+		motionAreaRegions := []float64{}
+		inactiveRegion := []float64{}
 		for i, c := range contours {
 			area := gocv.ContourArea(c)
 			if area < MinArea || area > MaxArea {
+				inactiveRegion = append(inactiveRegion, area)
 				sinceInteresting++
 				continue
 			}
-			// image is about 30,000
-			writeLog(area)
+			motionAreaRegions = append(motionAreaRegions, area)
+			// image is 307,200 (640x480)
 			gocv.DrawContours(&img, contours, i, red, 2)
 
 			rect := gocv.BoundingRect(c)
@@ -250,6 +263,15 @@ func motionDetector(window *gocv.Window, imchan chan gocv.Mat) {
 			sinceInteresting = 0
 
 		}
+		// Write images with contours to the video log until 2 seconds of absent data
+		if sinceInteresting < 80 {
+			videochan <- img
+			writeMotionEventLog(timestamp, motionEventId, sinceInteresting, motionAreaRegions, inactiveRegion)
+		} else {
+			closevideochan <- 1
+			motionEventId += 1
+		}
+
 		window.IMShow(img)
 		window.WaitKey(1)
 		kernel.Close()

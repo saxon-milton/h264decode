@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/nareix/joy4/av"
+	// "github.com/nareix/joy4/av"
 	"github.com/nareix/joy4/codec/h264parser"
 	// "github.com/nareix/joy4/format/ts"
 	"io"
@@ -19,97 +19,92 @@ var logger *log.Logger
 type counter struct{ c int }
 
 func init() {
-	logger = log.New(os.Stderr, "vlc-writer", log.Lshortfile)
+	logger = log.New(os.Stderr, "streamer ", log.Lshortfile)
 }
 func isNALU(packet []byte) bool {
-	if len(packet) != len(InitialNALU) {
+	if len(packet) < len(InitialNALU) {
 		return false
 	}
+	// The first NALU is a 4 byte packet, all others have the NALU
+	// in the packet's tailing 4 bytes
+	naluSegment := packet[len(packet)-4:]
 	for i := range InitialNALU {
-		if packet[i] != InitialNALU[i] {
+		if naluSegment[i] != InitialNALU[i] {
+			/*
+				if len(packet) <= 32 {
+					logger.Printf("\t not NALU %v\n", packet)
+				}
+			*/
 			return false
 		}
 	}
+	/*
+		if len(packet) <= 32 {
+			logger.Printf("\t found NALU %v\n", packet)
+		}
+	*/
 	return true
 }
 
 // read bytes until a new header appears
 func h264SegmentReader(r io.Reader) ([]byte, error) {
 	packet := []byte{}
+	byteCounter := 0
 	for !isNALU(packet) {
 		buf := make([]byte, 1)
-		_, err := r.Read(buf)
+		n, err := r.Read(buf)
+		byteCounter += n
+		packet = append(packet, buf...)
 		if err != nil {
 			return packet, err
 		}
-		packet = append(packet, buf...)
 	}
-	// 0, 0, 0, 1
+	logger.Printf("read %d byte h264 segment\n", len(packet))
 	return packet, nil
 }
 
 // read bytes between packets
 func h264Demuxer(r io.Reader, frames chan []byte) {
-	packet := []byte{}
-	firstPacketRcvd := false
+	// Read the opening NALU
+	packet, err := h264SegmentReader(r)
+	if err != nil {
+		logger.Printf("head segment error %v\n", err)
+		frames <- packet
+		close(frames)
+		return
+	}
+	packetCounter := 0
+	logger.Printf("read opening %d byte NALU boundary\n", len(packet))
+	// Packet is exactly a 4 byte NALU
 	for {
-		// Read the very first NALU
-		if !firstPacketRcvd {
-			segment, err := h264SegmentReader(r)
-			if err != nil {
-				frames <- packet
-				close(frames)
-				return
-			}
-			packet = segment
-			firstPacketRcvd = true
-		}
-
-		// Read the frame from the NALU boundary
+		// Read the frame to the next NALU boundary
 		segment, err := h264SegmentReader(r)
+		packet = append(packet, segment...)
 		if err != nil {
-			frames <- append(packet, segment...)
+			logger.Printf("error demuxing: %v\n", err)
+			frames <- packet
 			close(frames)
 			return
 		}
-		// Add the header for first packets
-		// Remove the header from the first packet
-		frames <- packet[0 : len(packet)-4]
-		// S
-		packet = addNALUHeader([]byte{})
-
+		// Remove the header of the next packet
+		packet = packet[0 : len(packet)-4]
+		// logger.Printf("(%d) packet %v\n", packetCounter, packet)
+		frames <- packet
+		packetCounter++
+		// Add the NALU header to the next packet
+		packet = append([]byte{}, InitialNALU...)
 	}
-	// What about the next packet?
-	// The next segment will be a packet up to
-	// and including the next header.
-
 }
 
-func addNALUHeader(frame []byte) []byte {
-	if isNALU(frame[0:4]) {
-		return frame
-	}
-	return append(InitialNALU, frame...)
-}
-
-func loadFrame(frame []byte) error {
-	if len(frame) >= 32 {
-		logger.Printf("frame %v\n", frame[0:32])
-	}
+func decodeFrame(frame []byte) error {
 	codecData, err := h264parser.NewCodecDataFromSPSAndPPS(frame, frame)
 	if err != nil {
 		logger.Printf("codec error %s\n", err)
 		return err
-	} else {
-		logger.Printf("frame (h, w) (%d, %d)\n", codecData.Height(), codecData.Width())
-		logger.Printf("codec type %v\n", codecData.Type())
 	}
+	logger.Printf("frame (h, w) (%d, %d)\n", codecData.Height(), codecData.Width())
+	logger.Printf("codec type %v\n", codecData.Type())
 	return nil
-}
-
-func decodeFrame(frame []byte) {
-	codecType := av.H264
-	_ = codecType
 }
 
 func handleConnection(frameCounter *counter, connection net.Conn) {
@@ -122,18 +117,22 @@ func handleConnection(frameCounter *counter, connection net.Conn) {
 	wg.Add(1)
 	go func() {
 		for frame := range frames {
+			logger.Printf("[frame:%d] received %d byte frame\n", frameCounter.c, len(frame))
+			max := 8
 			if len(frame) <= 8 {
-				logger.Printf("frame %v\n", frame[0:len(frame)])
-			} else {
-				logger.Printf("frame %v\n", frame[0:8])
+				max = len(frame)
 			}
 			naluType := h264parser.CheckNALUsType(frame)
-			logger.Printf("nalu type %d\n", naluType)
+			logger.Printf("[NT(%d) frame:%d.%d] %v\n",
+				naluType,
+				frameCounter.c,
+				len(frame),
+				frame[0:max])
 			if h264parser.IsDataNALU(frame) {
-				logger.Println("is data nalu")
+				logger.Printf("[frame:%d] data frame\n", frameCounter.c)
 			}
 			_, _ = frameFile.Write(frame)
-			err = loadFrame(frame)
+			err = decodeFrame(frame)
 			frameCounter.c += 1
 		}
 		wg.Done()

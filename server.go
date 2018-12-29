@@ -23,7 +23,10 @@ var (
 )
 
 // 24k is within a few feet for a full sized human
+// MaxArea Maximum area to consider a motion object
 const MaxArea = 24000
+
+// MinArea Minimum size of keypoint region which could be motion
 const MinArea = 200
 
 func init() {
@@ -68,6 +71,7 @@ func LittleEndianStructHandler(c net.Conn, imageChan chan []byte) {
 			panic(err)
 		}
 		imageSize := binary.LittleEndian.Uint32(b)
+		fmt.Printf("read %d bytes\n", imageSize)
 		// Read the little endian image
 		img := make([]byte, imageSize)
 		if err := binary.Read(c, binary.LittleEndian, &img); err != nil {
@@ -207,7 +211,63 @@ func writeMotionEventLog(timestamp string, eventId, sinceInteresting int, motion
 		len(inactiveRegion),
 		elementList(inactiveRegion)))
 }
+func detectMotion(videochan chan gocv.Mat, closevideochan chan int, mog2 gocv.BackgroundSubtractorMOG2, img gocv.Mat, sinceInteresting int) {
+	timestamp := time.Now().Format("2006.01.02T150405")
+	// Work off a smaller gray image
+	grayImage := gocv.NewMat()
+	gocv.CvtColor(img, &grayImage, gocv.ColorBGRToGray)
+	fgMask := gocv.NewMat()
+	imgThresh := gocv.NewMat()
 
+	// first phase of cleaning up image, obtain foreground only
+	mog2.Apply(grayImage, &fgMask)
+
+	// remaining cleanup of the image to use for finding contours.
+	// first use threshold
+	// gocv.Threshold(fgMask, &imgThresh, 25, 255, gocv.ThresholdBinary)
+	// AdaptiveThresholdMean=0, Gaussian1
+	blockSize := 255 // %2 == 1
+	gocv.AdaptiveThreshold(fgMask, &imgThresh, 255, gocv.AdaptiveThresholdGaussian, gocv.ThresholdBinary, blockSize, 2)
+
+	// then dilate
+	kernel := gocv.GetStructuringElement(gocv.MorphRect, image.Pt(3, 3))
+	gocv.Dilate(imgThresh, &imgThresh, kernel)
+
+	// now find contours
+	contours := gocv.FindContours(imgThresh, gocv.RetrievalExternal, gocv.ChainApproxSimple)
+	// object size of detected motion
+	motionAreaRegions := []float64{}
+	inactiveRegion := []float64{}
+	for i, c := range contours {
+		area := gocv.ContourArea(c)
+		if area < MinArea || area > MaxArea {
+			inactiveRegion = append(inactiveRegion, area)
+			sinceInteresting++
+			continue
+		}
+		motionAreaRegions = append(motionAreaRegions, area)
+		// image is 307,200 (640x480)
+		gocv.DrawContours(&img, contours, i, red, 2)
+
+		rect := gocv.BoundingRect(c)
+		gocv.Rectangle(&img, rect, blue, 2)
+		sinceInteresting = 0
+
+	}
+	// Write images with contours to the video log until 2 seconds of absent data
+	if sinceInteresting < 80 {
+		videochan <- img
+		writeMotionEventLog(timestamp, motionEventId, sinceInteresting, motionAreaRegions, inactiveRegion)
+	} else {
+		closevideochan <- 1
+		motionEventId += 1
+	}
+	kernel.Close()
+	imgThresh.Close()
+	fgMask.Close()
+	grayImage.Close()
+
+}
 func motionDetector(window *gocv.Window, imchan chan gocv.Mat) {
 	fmt.Printf("motion detector launched...\n")
 	mog2 := gocv.NewBackgroundSubtractorMOG2()
@@ -221,63 +281,15 @@ func motionDetector(window *gocv.Window, imchan chan gocv.Mat) {
 			img.Close()
 			continue
 		}
-		timestamp := time.Now().Format("2006.01.02T150405")
-		// Work off a smaller gray image
-		grayImage := gocv.NewMat()
-		gocv.CvtColor(img, &grayImage, gocv.ColorBGRToGray)
-		fgMask := gocv.NewMat()
-		imgThresh := gocv.NewMat()
-
-		// first phase of cleaning up image, obtain foreground only
-		mog2.Apply(grayImage, &fgMask)
-
-		// remaining cleanup of the image to use for finding contours.
-		// first use threshold
-		// gocv.Threshold(fgMask, &imgThresh, 25, 255, gocv.ThresholdBinary)
-		// AdaptiveThresholdMean=0, Gaussian1
-		blockSize := 255 // %2 == 1
-		gocv.AdaptiveThreshold(fgMask, &imgThresh, 255, gocv.AdaptiveThresholdGaussian, gocv.ThresholdBinary, blockSize, 2)
-
-		// then dilate
-		kernel := gocv.GetStructuringElement(gocv.MorphRect, image.Pt(3, 3))
-		gocv.Dilate(imgThresh, &imgThresh, kernel)
-
-		// now find contours
-		contours := gocv.FindContours(imgThresh, gocv.RetrievalExternal, gocv.ChainApproxSimple)
-		// object size of detected motion
-		motionAreaRegions := []float64{}
-		inactiveRegion := []float64{}
-		for i, c := range contours {
-			area := gocv.ContourArea(c)
-			if area < MinArea || area > MaxArea {
-				inactiveRegion = append(inactiveRegion, area)
-				sinceInteresting++
-				continue
-			}
-			motionAreaRegions = append(motionAreaRegions, area)
-			// image is 307,200 (640x480)
-			gocv.DrawContours(&img, contours, i, red, 2)
-
-			rect := gocv.BoundingRect(c)
-			gocv.Rectangle(&img, rect, blue, 2)
-			sinceInteresting = 0
-
-		}
-		// Write images with contours to the video log until 2 seconds of absent data
-		if sinceInteresting < 80 {
-			videochan <- img
-			writeMotionEventLog(timestamp, motionEventId, sinceInteresting, motionAreaRegions, inactiveRegion)
-		} else {
-			closevideochan <- 1
-			motionEventId += 1
-		}
+		_ = mog2
+		_ = sinceInteresting
+		/*
+			motionImage := img.Clone()
+			go detectMotion(videochan, closevideochan, mog2, motionImage, sinceInteresting)
+		*/
 
 		window.IMShow(img)
 		window.WaitKey(1)
-		kernel.Close()
-		imgThresh.Close()
-		fgMask.Close()
-		grayImage.Close()
 		img.Close()
 	}
 	mog2.Close()
@@ -300,6 +312,8 @@ func main() {
 		img, err := jpegToMat(imgBytes)
 		if err == nil {
 			imstream <- img
+		} else {
+			fmt.Printf("error decoding bytestream: %s\n", err)
 		}
 	}
 }

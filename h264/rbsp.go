@@ -27,6 +27,7 @@ func NewRBSP(frame []byte) []byte {
 	return frame[5:]
 }
 
+// TODO: Should be base-ten big endian bit arrays, not bytes
 // ITU A.2.1.1 - Bit 9 is 1
 func isConstrainedBaselineProfile(profile int, b []byte) bool {
 	if profile != PROFILE_IDC_BASELINE {

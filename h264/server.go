@@ -139,7 +139,12 @@ func handleConnection(frameCounter *counter, h264stream io.Reader) {
 			if nalUnitType(frame) == NALU_TYPE_SPS {
 				sps := NewSPS(rbsp)
 				logger.Printf("\tSPS: %#v\n", sps)
-				logger.Printf("\tProfileIDC: %s\n", ProfileIDC[sps.ProfileIDC])
+				logger.Printf("\tProfileIDC: %s\n", ProfileIDC[sps.Profile])
+				logger.Printf("\tLevelIDC: %d\n", sps.Level)
+				logger.Printf("\tSPS ID: %d\n", sps.ID)
+				logger.Printf("\tChromaFormat %d\n", sps.ChromaFormat)
+				logger.Printf("\tBitDepth Luma: %d\n", sps.BitDepthLuma)
+				logger.Printf("\tBitDetch Chroma: %d\n", sps.BitDepthChroma)
 				logger.Printf("%d---\n%#v\n\n---%d", frameCounter.c, rbsp, frameCounter.c)
 			}
 			if h264parser.IsDataNALU(frame[4:]) {

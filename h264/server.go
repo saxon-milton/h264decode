@@ -108,10 +108,13 @@ func decodeFrame(frame []byte) error {
 		logger.Printf("codec error %s\n", err)
 		return err
 	}
-	logger.Printf("\t%v NALRefIDC: %d %s\n", frame[4], nalRefIDC(frame), NALRefIDC[nalRefIDC(frame)])
-	logger.Printf("\t%v NALUnitType %d %s\n", frame[4], nalUnitType(frame), NALUnitType[nalUnitType(frame)])
-	logger.Printf("\tframe (h, w) (%d, %d)\n", codecData.Height(), codecData.Width())
-	logger.Printf("\tcodec type %v\n", codecData.Type())
+	_ = codecData
+	/*
+		logger.Printf("\t%v NALRefIDC: %d %s\n", frame[4], nalRefIDC(frame), NALRefIDC[nalRefIDC(frame)])
+		logger.Printf("\t%v NALUnitType %d %s\n", frame[4], nalUnitType(frame), NALUnitType[nalUnitType(frame)])
+		logger.Printf("\tframe (h, w) (%d, %d)\n", codecData.Height(), codecData.Width())
+		logger.Printf("\tcodec type %v\n", codecData.Type())
+	*/
 	return nil
 }
 
@@ -130,25 +133,22 @@ func handleConnection(frameCounter *counter, h264stream io.Reader) {
 		for frame := range frames {
 			// Drop leading 0x0, 0x0, 0x1, NALUTypeByte
 			rbsp := NewRBSP(frame)
-			logger.Printf("[frame:%d] received %d byte frame\n", frameCounter.c, len(frame))
 			naluType := h264parser.CheckNALUsType(frame[4:])
-			logger.Printf("\t[NaluType(%d) frame:%d.%d]",
-				naluType,
-				frameCounter.c,
-				len(frame))
+			_ = naluType
 			if nalUnitType(frame) == NALU_TYPE_SPS {
-				sps := NewSPS(rbsp)
-				logger.Printf("\tSPS: %#v\n", sps)
-				logger.Printf("\tProfileIDC: %s\n", ProfileIDC[sps.Profile])
-				logger.Printf("\tLevelIDC: %d\n", sps.Level)
-				logger.Printf("\tSPS ID: %d\n", sps.ID)
-				logger.Printf("\tChromaFormat %d\n", sps.ChromaFormat)
-				logger.Printf("\tBitDepth Luma: %d\n", sps.BitDepthLuma)
-				logger.Printf("\tBitDetch Chroma: %d\n", sps.BitDepthChroma)
+				_ = NewSPS(rbsp)
 				logger.Printf("%d---\n%#v\n\n---%d", frameCounter.c, rbsp, frameCounter.c)
-			}
-			if h264parser.IsDataNALU(frame[4:]) {
-				logger.Printf("\t[frame:%d] data frame\n", frameCounter.c)
+			} else {
+				/*
+					logger.Printf("[frame:%d] received %d byte frame\n", frameCounter.c, len(frame))
+					logger.Printf("\t[NaluType(%d) rbsp:%d.%d]",
+						naluType,
+						frameCounter.c,
+						len(rbsp))
+					if h264parser.IsDataNALU(frame[4:]) {
+						logger.Printf("\t[frame:%d] data frame\n", frameCounter.c)
+					}
+				*/
 			}
 			_, _ = frameFile.Write(frame)
 			err = decodeFrame(frame)

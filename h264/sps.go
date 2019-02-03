@@ -157,28 +157,6 @@ var (
 	ScalingList8x8 = ScalingList4x4
 )
 
-func bitVal(bits []int) int {
-	t := 0
-	for i, b := range bits {
-		if b == 1 {
-			t += 1 << uint((len(bits)-1)-i)
-		}
-	}
-	fmt.Printf("\t bitVal: %d\n", t)
-	return t
-}
-
-// 9.1 Table 9-2
-func ue(bits []int) int {
-	return bitVal(bits) - 1
-}
-
-// 9.1.1 Table 9-3
-func se(bits []int) int {
-	codeNum := bitVal(bits) - 1
-	return int(math.Pow(float64(-1), float64(codeNum+1)) * math.Ceil(float64(codeNum/2)))
-}
-
 func isInList(l []int, term int) bool {
 	for _, m := range l {
 		if m == term {

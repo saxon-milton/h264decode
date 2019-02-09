@@ -1,8 +1,6 @@
 package h264
 
-// import "github.com/mrmod/degolomb"
 import "fmt"
-import "math"
 import "strings"
 
 // Specification Page 43 7.3.2.1.1
@@ -165,7 +163,13 @@ func isInList(l []int, term int) bool {
 	}
 	return false
 }
+func debugPacket(name string, packet interface{}) {
 
+	fmt.Printf("= %s packet\n", name)
+	for _, line := range strings.Split(fmt.Sprintf("%+v", packet), " ") {
+		fmt.Printf("\t%s\n", line)
+	}
+}
 func scalingList(b *BitReader, rbsp []byte, scalingList []int, sizeOfScalingList int, defaultScalingMatrix []int) {
 	lastScale := 8
 	nextScale := 8
@@ -188,11 +192,11 @@ func scalingList(b *BitReader, rbsp []byte, scalingList []int, sizeOfScalingList
 }
 func NewSPS(rbsp []byte) SPS {
 	fmt.Printf(" == SPS RBSP %d bytes %d bits == \n", len(rbsp), len(rbsp)*8)
+	fmt.Printf(" == %#v\n", rbsp[0:8])
 	sps := SPS{}
 	b := &BitReader{}
 	// Byte 0
 	nextField := func(name string, bits int) int {
-		fmt.Printf("\tget %d bits for %s\n", bits, name)
 		buf := make([]int, bits)
 		_, err := b.Read(rbsp, buf)
 		if err != nil {
@@ -232,9 +236,7 @@ func NewSPS(rbsp []byte) SPS {
 	_ = nextField("ReservedZeroBits", 2)
 	sps.Level = nextField("LevelIDC", 8)
 	// sps.ID = nextField("SPSID", 6) // proper
-	fmt.Printf(" -- Pre SPSID %+v\n", b)
 	sps.ID = ue(b.golomb(rbsp))
-	fmt.Printf(" -- SPSID %+v\n", b)
 	sps.ChromaFormat = ue(b.golomb(rbsp))
 	// This should be done only for certain ProfileIDC:
 	isProfileIDC := []int{100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135}
@@ -292,13 +294,7 @@ func NewSPS(rbsp []byte) SPS {
 			}
 		}
 	} // End SpecialProfileCase1
-	showSPS := func() {
 
-		fmt.Printf("=== SPS RBSP ===\n")
-		for _, line := range strings.Split(fmt.Sprintf("%+v", sps), " ") {
-			fmt.Println(line)
-		}
-	}
 	// showSPS()
 	// return sps
 	// Possibly wrong due to no scaling list being built
@@ -447,6 +443,6 @@ func NewSPS(rbsp []byte) SPS {
 
 	} // End VuiParameters Annex E.1.1
 
-	showSPS()
+	debugPacket("SPS", sps)
 	return sps
 }

@@ -3,6 +3,7 @@ package h264
 import (
 	"fmt"
 	"github.com/mrmod/degolomb"
+	"math"
 )
 
 type BitReader struct {
@@ -18,7 +19,7 @@ func bitVal(bits []int) int {
 			t += 1 << uint((len(bits)-1)-i)
 		}
 	}
-	fmt.Printf("\t bitVal: %d\n", t)
+	// fmt.Printf("\t bitVal: %d\n", t)
 	return t
 }
 
@@ -34,8 +35,8 @@ func se(bits []int) int {
 }
 
 func (b *BitReader) Fastforward(bits int) {
-	b.byteOffset = bits / 8
-	b.bitOffset = bits % 8
+	b.bitsRead += bits
+	b.setOffset()
 }
 func (b *BitReader) setOffset() {
 	b.byteOffset = b.bitsRead / 8
@@ -43,7 +44,7 @@ func (b *BitReader) setOffset() {
 }
 
 func (b *BitReader) golomb(ib []byte) []int {
-	fmt.Printf("\t%d: bitReader golomb: %v\n", b.bitsRead, ib[b.byteOffset])
+	// 	fmt.Printf("\t%d: bitReader golomb: %v\n", b.bitsRead, ib[b.byteOffset])
 
 	zeros := -1
 	bit := 0
@@ -67,31 +68,39 @@ func (b *BitReader) golomb(ib []byte) []int {
 
 	return bits
 }
+func (b *BitReader) HasMoreData(ib []byte) bool {
+	fmt.Printf("\tHasMoreData: %+v\n", b)
+	fmt.Printf("\tHas %d more bytes\n", len(ib)-b.byteOffset)
+	return len(ib)-b.byteOffset == 0
+}
+
+func (b *BitReader) IsByteAligned() bool {
+	return b.bitOffset == 0
+}
 
 func (b *BitReader) Read(ib []byte, buf []int) (int, error) {
-	fmt.Printf("\t%d: bitReader wants %d bits\n", b.bitsRead, len(buf))
+	// fmt.Printf("\t%d: bitReader wants %d bits\n", b.bitsRead, len(buf))
 	if b.byteOffset > len(ib) {
 		return 0, fmt.Errorf("EOF: %d > %d\n", b.byteOffset, len(ib))
 	}
 	i := 0
 	for {
 		for _, bit := range degolomb.BitArray(ib[b.byteOffset])[b.bitOffset:8] {
-			fmt.Printf("\t[%d:%d] -> buf[%d]\n", i, 8-b.bitOffset, bit)
+			// 		fmt.Printf("\t[%d:%d] -> buf[%d]\n", i, 8-b.bitOffset, bit)
 			buf[i] = bit
 			i++
 			b.bitsRead += 1
 			b.setOffset()
 			if i >= len(buf) {
-				goto BufferFilled
+				return len(buf), nil
 			}
 		}
-		fmt.Printf("\t -- %d\n", i)
+		//		fmt.Printf("\t -- %d\n", i)
 		if b.byteOffset > len(ib) {
 			return len(buf), fmt.Errorf("EOF: %d > %d\n", b.byteOffset, len(ib))
 		}
 
 	}
-BufferFilled:
 	return len(buf), nil
 
 }

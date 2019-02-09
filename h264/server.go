@@ -119,6 +119,8 @@ func decodeFrame(frame []byte) error {
 }
 
 func handleConnection(frameCounter *counter, h264stream io.Reader) {
+	var sps SPS
+	var pps PPS
 	frameFile, err := os.OpenFile("output.mp4", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		logger.Printf("Failed to open output.mp4: %v\n", err)
@@ -133,23 +135,22 @@ func handleConnection(frameCounter *counter, h264stream io.Reader) {
 		for frame := range frames {
 			// Drop leading 0x0, 0x0, 0x1, NALUTypeByte
 			rbsp := NewRBSP(frame)
-			naluType := h264parser.CheckNALUsType(frame[4:])
-			_ = naluType
-			if nalUnitType(frame) == NALU_TYPE_SPS {
-				_ = NewSPS(rbsp)
-				logger.Printf("%d---\n%#v\n\n---%d", frameCounter.c, rbsp, frameCounter.c)
-			} else {
-				/*
-					logger.Printf("[frame:%d] received %d byte frame\n", frameCounter.c, len(frame))
-					logger.Printf("\t[NaluType(%d) rbsp:%d.%d]",
-						naluType,
-						frameCounter.c,
-						len(rbsp))
-					if h264parser.IsDataNALU(frame[4:]) {
-						logger.Printf("\t[frame:%d] data frame\n", frameCounter.c)
-					}
-				*/
+			naluType := nalUnitType(frame)
+			logger.Printf("NALUTYPE: %d FRAME: %d RBSP: %d\n", naluType, frameCounter.c, len(rbsp))
+			logger.Printf("\t%s", NALUnitType[naluType])
+			switch nalUnitType(frame) {
+			case NALU_TYPE_SPS:
+				sps = NewSPS(rbsp)
+			case NALU_TYPE_PPS:
+				pps = NewPPS(&sps, rbsp)
+			case NALU_TYPE_SLICE_IDR_PICTURE:
+				_ = NewSlice(nalUnitType(frame), nalRefIDC(frame), &sps, &pps, rbsp)
+			case NALU_TYPE_SLICE_NON_IDR_PICTURE:
+				_ = NewSlice(nalUnitType(frame), nalRefIDC(frame), &sps, &pps, rbsp)
+			default:
+				logger.Printf("== SKIP: %d:%s\n", naluType, NALUnitType[naluType])
 			}
+
 			_, _ = frameFile.Write(frame)
 			err = decodeFrame(frame)
 			frameCounter.c += 1

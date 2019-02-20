@@ -37,23 +37,6 @@ type PPS struct {
 	SecondChromaQpIndexOffset         int
 }
 
-// 7.3.2.11
-func rbspTrailingBits(b *BitReader, rbsp []byte) {
-	rbspStopOneBit := make([]int, 1)
-	if _, err := b.Read(rbsp, rbspStopOneBit); err != nil {
-		fmt.Println("error reading StopOneBit: %v\n", err)
-	}
-	// 7.2
-	for !b.IsByteAligned() {
-		// RBSPAlignmentZeroBit
-		rbspAlignmentZeroBit := make([]int, 1)
-		if _, err := b.Read(rbsp, rbspAlignmentZeroBit); err != nil {
-			fmt.Println("error reading AligntmentZeroBit: %v\n", err)
-			break
-		}
-	}
-}
-
 func NewPPS(sps *SPS, rbsp []byte) PPS {
 	fmt.Printf(" == PPS RBSP %d bytes %d bits == \n", len(rbsp), len(rbsp)*8)
 	fmt.Printf(" == %#v\n", rbsp[0:8])

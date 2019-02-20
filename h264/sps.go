@@ -17,13 +17,13 @@ type SPS struct {
 	// 8 bits
 	Level int
 	// Range 0 - 31 ; 6 bits
-	ID                    int
-	ChromaFormat          int
-	UseSeparateColorPlane bool
-	// minus8
-	BitDepthLuma, BitDepthChroma int
-	QPrimeYZeroTransformBypass   bool
-	SeqScalingMatrixPresent      bool
+	ID                         int
+	ChromaFormat               int
+	UseSeparateColorPlane      bool
+	BitDepthLumaMinus8         int
+	BitDepthChromaMinus8       int
+	QPrimeYZeroTransformBypass bool
+	SeqScalingMatrixPresent    bool
 	// Delta is (0-12)-1 ; 4 bits
 	SeqScalingList []bool // se
 	// Range 0 - 12; 4 bits
@@ -250,8 +250,8 @@ func NewSPS(rbsp []byte) SPS {
 			}
 		}
 
-		sps.BitDepthLuma = ue(b.golomb(rbsp))
-		sps.BitDepthChroma = ue(b.golomb(rbsp))
+		sps.BitDepthLumaMinus8 = ue(b.golomb(rbsp))
+		sps.BitDepthChromaMinus8 = ue(b.golomb(rbsp))
 		if v := nextField("QPrimeYZeroTransformBypassFlag", 1); v == 1 {
 			sps.QPrimeYZeroTransformBypass = true
 		} else {

@@ -1,5 +1,7 @@
 package h264
 
+import "fmt"
+
 const (
 	PROFILE_IDC_BASELINE            = 66
 	PROFILE_IDC_MAIN                = 77
@@ -22,6 +24,22 @@ var (
 	}
 )
 
+// 7.3.2.11
+func rbspTrailingBits(b *BitReader, rbsp []byte) {
+	rbspStopOneBit := make([]int, 1)
+	if _, err := b.Read(rbsp, rbspStopOneBit); err != nil {
+		fmt.Println("error reading StopOneBit: %v\n", err)
+	}
+	// 7.2
+	for !b.IsByteAligned() {
+		// RBSPAlignmentZeroBit
+		rbspAlignmentZeroBit := make([]int, 1)
+		if _, err := b.Read(rbsp, rbspAlignmentZeroBit); err != nil {
+			fmt.Println("error reading AligntmentZeroBit: %v\n", err)
+			break
+		}
+	}
+}
 func NewRBSP(frame []byte) []byte {
 	// TODO: NALUType 14,20,21 add padding to 3rd or 4th byte
 	return frame[5:]

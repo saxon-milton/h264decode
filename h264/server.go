@@ -134,21 +134,23 @@ func handleConnection(frameCounter *counter, h264stream io.Reader) {
 	go func() {
 		for frame := range frames {
 			// Drop leading 0x0, 0x0, 0x1, NALUTypeByte
+			nalUnit := NewNalUnit(frame[4:])
 			rbsp := NewRBSP(frame)
-			naluType := nalUnitType(frame)
-			logger.Printf("NALUTYPE: %d FRAME: %d RBSP: %d\n", naluType, frameCounter.c, len(rbsp))
-			logger.Printf("\t%s", NALUnitType[naluType])
-			switch nalUnitType(frame) {
+			// logger.Printf("\tnaluType: %v :: %v\n", nalUnitType(frame), nalRefIDC(frame))
+			logger.Printf("NALUTYPE: %d FRAME: %d RBSP: %d\n", nalUnit.Type, frameCounter.c, len(rbsp))
+			// logger.Printf("\t%s", NALUnitType[nalUnit.Type])
+			// logger.Printf("NalUnit: %+v\n", nalUnit)
+			switch nalUnit.Type {
 			case NALU_TYPE_SPS:
 				sps = NewSPS(rbsp)
 			case NALU_TYPE_PPS:
 				pps = NewPPS(&sps, rbsp)
 			case NALU_TYPE_SLICE_IDR_PICTURE:
-				_ = NewSlice(nalUnitType(frame), nalRefIDC(frame), &sps, &pps, rbsp)
+				_ = NewSlice(&nalUnit, &sps, &pps, rbsp)
 			case NALU_TYPE_SLICE_NON_IDR_PICTURE:
-				_ = NewSlice(nalUnitType(frame), nalRefIDC(frame), &sps, &pps, rbsp)
+				_ = NewSlice(&nalUnit, &sps, &pps, rbsp)
 			default:
-				logger.Printf("== SKIP: %d:%s\n", naluType, NALUnitType[naluType])
+				logger.Printf("== SKIP: %d:%s\n", nalUnit.Type, NALUnitType[nalUnit.Type])
 			}
 
 			_, _ = frameFile.Write(frame)

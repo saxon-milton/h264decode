@@ -146,9 +146,9 @@ func handleConnection(frameCounter *counter, h264stream io.Reader) {
 			case NALU_TYPE_PPS:
 				pps = NewPPS(&sps, rbsp)
 			case NALU_TYPE_SLICE_IDR_PICTURE:
-				_ = NewSlice(&nalUnit, &sps, &pps, rbsp)
+				_ = NewSliceContext(&nalUnit, &sps, &pps, rbsp)
 			case NALU_TYPE_SLICE_NON_IDR_PICTURE:
-				_ = NewSlice(&nalUnit, &sps, &pps, rbsp)
+				_ = NewSliceContext(&nalUnit, &sps, &pps, rbsp)
 			default:
 				logger.Printf("== SKIP: %d:%s\n", nalUnit.Type, NALUnitType[nalUnit.Type])
 			}

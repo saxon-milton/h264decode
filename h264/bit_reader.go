@@ -191,6 +191,12 @@ func (b *BitReader) IsByteAligned() bool {
 	return b.bitOffset == 0
 }
 
+func (b *BitReader) ReadOneBit(ib []byte) int {
+	buf := make([]int, 1)
+	_, _ = b.Read(ib, buf)
+	return buf[0]
+}
+
 func (b *BitReader) Read(ib []byte, buf []int) (int, error) {
 	// fmt.Printf("\t%d: bitReader wants %d bits\n", b.bitsRead, len(buf))
 	if b.byteOffset > len(ib) {

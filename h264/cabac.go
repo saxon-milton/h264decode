@@ -1,7 +1,10 @@
 package h264
 
-const NaCtxId = 10000
-const MbAddrNotAvailable = 10000
+const (
+	NaCtxId            = 10000
+	NA_SUFFIX          = -1
+	MbAddrNotAvailable = 10000
+)
 
 // G.7.4.3.4 via G.7.3.3.4 via 7.3.2.13 for NalUnitType 20 or 21
 // refLayerMbWidthC is equal to MbWidthC for the reference layer representation
@@ -91,9 +94,288 @@ func CondTermFlag(mbAddr, mbSkipFlag int) int {
 	return 1
 }
 
+// s9.3.3 p 278: Returns the value of the syntax element
+func (bin *Binarization) Decode(b *BitReader, sliceContext *SliceContext, rbsp []byte) int {
+	binString := []int{}
+	if bin.SyntaxElement == "MbType" {
+		binString = binIdxMbMap[sliceContext.Slice.Data.SliceTypeName][sliceContext.Slice.Data.MbType]
+	} else {
+		logger.Printf("TODO: no means to find binString for %s\n", bin.SyntaxElement)
+	}
+	return binString[0]
+}
+
 // 9.3.3.1.1 : returns ctxIdxInc
 func Decoder9_3_3_1_1_1(condTermFlagA, condTermFlagB int) int {
 	return condTermFlagA + condTermFlagB
+}
+
+// 7-30 p 112
+func SliceQPy(pps *PPS, header *SliceHeader) int {
+	return 26 + pps.PicInitQpMinus26 + header.SliceQpDelta
+}
+
+type CABAC struct {
+}
+
+// table 9-1
+func initCabac(pps *PPS, header *SliceHeader, data *SliceData) {
+	pStateIdx := SliceQPy(pps, header)
+	valMPS := SliceQPy(pps, header)
+	_ = pStateIdx
+	_ = valMPS
+	// Initialization of context variables
+	// Initialization of decoding engine
+}
+
+// Table 9-36, 9-37
+// func BinIdx(mbType int, sliceTypeName string) []int {
+// Map of SliceTypeName[MbType][]int{binString}
+// {"SliceTypeName": {MbTypeCode: []BinString}}
+var (
+	binIdxMbMap = map[string]map[int][]int{
+		"I": map[int][]int{
+			0:  []int{0},
+			1:  []int{1, 0, 0, 0, 0, 0},
+			2:  []int{1, 0, 0, 0, 0, 1},
+			3:  []int{1, 0, 0, 0, 1, 0},
+			4:  []int{1, 0, 0, 0, 1, 1},
+			5:  []int{1, 0, 0, 1, 0, 0, 0},
+			6:  []int{1, 0, 0, 1, 0, 0, 1},
+			7:  []int{1, 0, 0, 1, 0, 1, 0},
+			8:  []int{1, 0, 0, 1, 0, 1, 1},
+			9:  []int{1, 0, 0, 1, 1, 0, 0},
+			10: []int{1, 0, 0, 1, 1, 0, 1},
+			11: []int{1, 0, 0, 1, 1, 1, 0},
+			12: []int{1, 0, 0, 1, 1, 1, 1},
+			13: []int{1, 0, 1, 0, 0, 0},
+			14: []int{1, 0, 1, 0, 0, 1},
+			15: []int{1, 0, 1, 0, 1, 0},
+			16: []int{1, 0, 1, 0, 1, 1},
+			17: []int{1, 0, 1, 1, 0, 0, 0},
+			18: []int{1, 0, 1, 1, 0, 0, 1},
+			19: []int{1, 0, 1, 1, 0, 1, 0},
+			20: []int{1, 0, 1, 1, 0, 1, 1},
+			21: []int{1, 0, 1, 1, 1, 0, 0},
+			22: []int{1, 0, 1, 1, 1, 0, 1},
+			23: []int{1, 0, 1, 1, 1, 1, 0},
+			24: []int{1, 0, 1, 1, 1, 1, 1},
+			25: []int{1, 1},
+		},
+		// Table 9-37
+		"P": map[int][]int{
+			0:  []int{0, 0, 0},
+			1:  []int{0, 1, 1},
+			2:  []int{0, 1, 0},
+			3:  []int{0, 0, 1},
+			4:  []int{},
+			5:  []int{1},
+			6:  []int{1},
+			7:  []int{1},
+			8:  []int{1},
+			9:  []int{1},
+			10: []int{1},
+			11: []int{1},
+			12: []int{1},
+			13: []int{1},
+			14: []int{1},
+			15: []int{1},
+			16: []int{1},
+			17: []int{1},
+			18: []int{1},
+			19: []int{1},
+			20: []int{1},
+			21: []int{1},
+			22: []int{1},
+			23: []int{1},
+			24: []int{1},
+			25: []int{1},
+			26: []int{1},
+			27: []int{1},
+			28: []int{1},
+			29: []int{1},
+			30: []int{1},
+		},
+		// Table 9-37
+		"SP": map[int][]int{
+			0:  []int{0, 0, 0},
+			1:  []int{0, 1, 1},
+			2:  []int{0, 1, 0},
+			3:  []int{0, 0, 1},
+			4:  []int{},
+			5:  []int{1},
+			6:  []int{1},
+			7:  []int{1},
+			8:  []int{1},
+			9:  []int{1},
+			10: []int{1},
+			11: []int{1},
+			12: []int{1},
+			13: []int{1},
+			14: []int{1},
+			15: []int{1},
+			16: []int{1},
+			17: []int{1},
+			18: []int{1},
+			19: []int{1},
+			20: []int{1},
+			21: []int{1},
+			22: []int{1},
+			23: []int{1},
+			24: []int{1},
+			25: []int{1},
+			26: []int{1},
+			27: []int{1},
+			28: []int{1},
+			29: []int{1},
+			30: []int{1},
+		},
+		// TODO: B Slice table 9-37
+	}
+
+	// Map of SliceTypeName[SubMbType][]int{binString}
+	binIdxSubMbMap = map[string]map[int][]int{
+		"P": map[int][]int{
+			0: []int{1},
+			1: []int{0, 0},
+			2: []int{0, 1, 1},
+			3: []int{0, 1, 0},
+		},
+		"SP": map[int][]int{
+			0: []int{1},
+			1: []int{0, 0},
+			2: []int{0, 1, 1},
+			3: []int{0, 1, 0},
+		},
+		// TODO: B slice table 9-38
+	}
+
+	// Table 9-36, 9-37
+	MbBinIdx = []int{1, 2, 3, 4, 5, 6}
+
+	// Table 9-38
+	SubMbBinIdx = []int{0, 1, 2, 3, 4, 5}
+)
+
+// Table 9-34
+type MaxBinIdxCtx struct {
+	// When false, Prefix is the MaxBinIdxCtx
+	IsPrefixSuffix bool
+	Prefix, Suffix int
+}
+type CtxIdxOffset struct {
+	// When false, Prefix is the MaxBinIdxCtx
+	IsPrefixSuffix bool
+	Prefix, Suffix int
+}
+
+// Table 9-34
+type Binarization struct {
+	SyntaxElement string
+	BinarizationType
+	MaxBinIdxCtx
+	CtxIdxOffset
+	UseDecodeBypass int
+	binIdx          int
+}
+type BinarizationType struct {
+	PrefixSuffix   bool
+	FixedLength    bool
+	Unary          bool
+	TruncatedUnary bool
+	CMax           bool
+	// 9.3.2.3
+	UEGk      bool
+	CMaxValue int
+}
+
+func NewBinarization(syntaxElement string, data *SliceData) Binarization {
+	sliceTypeName := data.SliceTypeName
+	logger.Printf("NewBinarization for %s in sliceType %s\n", syntaxElement, sliceTypeName)
+	binarization := Binarization{SyntaxElement: syntaxElement}
+	switch syntaxElement {
+	case "CodedBlockPattern":
+		binarization.BinarizationType = BinarizationType{PrefixSuffix: true}
+		binarization.MaxBinIdxCtx = MaxBinIdxCtx{IsPrefixSuffix: true, Prefix: 3, Suffix: 1}
+		binarization.CtxIdxOffset = CtxIdxOffset{IsPrefixSuffix: true, Prefix: 73, Suffix: 77}
+	case "IntraChromaPredMode":
+		binarization.BinarizationType = BinarizationType{
+			TruncatedUnary: true, CMax: true, CMaxValue: 3}
+		binarization.MaxBinIdxCtx = MaxBinIdxCtx{Prefix: 1}
+		binarization.CtxIdxOffset = CtxIdxOffset{Prefix: 64}
+	case "MbQpDelta":
+		binarization.BinarizationType = BinarizationType{}
+		binarization.MaxBinIdxCtx = MaxBinIdxCtx{Prefix: 2}
+		binarization.CtxIdxOffset = CtxIdxOffset{Prefix: 60}
+	case "MvdLnEnd0":
+		binarization.UseDecodeBypass = 1
+		binarization.BinarizationType = BinarizationType{UEGk: true}
+		binarization.MaxBinIdxCtx = MaxBinIdxCtx{IsPrefixSuffix: true, Prefix: 4, Suffix: NA_SUFFIX}
+		binarization.CtxIdxOffset = CtxIdxOffset{
+			IsPrefixSuffix: true,
+			Prefix:         40,
+			Suffix:         NA_SUFFIX,
+		}
+	case "MvdLnEnd1":
+		binarization.UseDecodeBypass = 1
+		binarization.BinarizationType = BinarizationType{UEGk: true}
+		binarization.MaxBinIdxCtx = MaxBinIdxCtx{
+			IsPrefixSuffix: true,
+			Prefix:         4,
+			Suffix:         NA_SUFFIX,
+		}
+		binarization.CtxIdxOffset = CtxIdxOffset{
+			IsPrefixSuffix: true,
+			Prefix:         47,
+			Suffix:         NA_SUFFIX,
+		}
+	case "MbType":
+		logger.Printf("\tMbType is %s\n", data.MbTypeName)
+		switch sliceTypeName {
+		case "SI":
+			binarization.BinarizationType = BinarizationType{PrefixSuffix: true}
+			binarization.MaxBinIdxCtx = MaxBinIdxCtx{IsPrefixSuffix: true, Prefix: 0, Suffix: 6}
+			binarization.CtxIdxOffset = CtxIdxOffset{IsPrefixSuffix: true, Prefix: 0, Suffix: 3}
+		case "I":
+			binarization.BinarizationType = BinarizationType{}
+			binarization.MaxBinIdxCtx = MaxBinIdxCtx{Prefix: 6}
+			binarization.CtxIdxOffset = CtxIdxOffset{Prefix: 3}
+		case "SP":
+			fallthrough
+		case "P":
+			binarization.BinarizationType = BinarizationType{PrefixSuffix: true}
+			binarization.MaxBinIdxCtx = MaxBinIdxCtx{IsPrefixSuffix: true, Prefix: 2, Suffix: 5}
+			binarization.CtxIdxOffset = CtxIdxOffset{IsPrefixSuffix: true, Prefix: 14, Suffix: 17}
+		}
+	case "MbFieldDecodingFlag":
+		binarization.BinarizationType = BinarizationType{
+			FixedLength: true, CMax: true, CMaxValue: 1}
+		binarization.MaxBinIdxCtx = MaxBinIdxCtx{Prefix: 0}
+		binarization.CtxIdxOffset = CtxIdxOffset{Prefix: 70}
+	case "PrevIntra4x4PredModeFlag":
+		fallthrough
+	case "PrevIntra8x8PredModeFlag":
+		binarization.BinarizationType = BinarizationType{FixedLength: true, CMax: true, CMaxValue: 1}
+		binarization.MaxBinIdxCtx = MaxBinIdxCtx{Prefix: 0}
+		binarization.CtxIdxOffset = CtxIdxOffset{Prefix: 68}
+	case "RefIdxL0":
+		fallthrough
+	case "RefIdxL1":
+		binarization.BinarizationType = BinarizationType{Unary: true}
+		binarization.MaxBinIdxCtx = MaxBinIdxCtx{Prefix: 2}
+		binarization.CtxIdxOffset = CtxIdxOffset{Prefix: 54}
+	case "RemIntra4x4PredMode":
+		fallthrough
+	case "RemIntra8x8PredMode":
+		binarization.BinarizationType = BinarizationType{FixedLength: true, CMax: true, CMaxValue: 7}
+		binarization.MaxBinIdxCtx = MaxBinIdxCtx{Prefix: 0}
+		binarization.CtxIdxOffset = CtxIdxOffset{Prefix: 69}
+	case "TransformSize8x8Flag":
+		binarization.BinarizationType = BinarizationType{FixedLength: true, CMax: true, CMaxValue: 1}
+		binarization.MaxBinIdxCtx = MaxBinIdxCtx{Prefix: 0}
+		binarization.CtxIdxOffset = CtxIdxOffset{Prefix: 399}
+	}
+	return binarization
 }
 
 func CtxIdx(binIdx, maxBinIdxCtx, ctxIdxOffset int) int {

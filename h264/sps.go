@@ -164,10 +164,9 @@ func isInList(l []int, term int) bool {
 	return false
 }
 func debugPacket(name string, packet interface{}) {
-
-	fmt.Printf("= %s packet\n", name)
+	logger.Printf("%s packet\n", name)
 	for _, line := range strings.Split(fmt.Sprintf("%+v", packet), " ") {
-		fmt.Printf("\t%s\n", line)
+		logger.Printf("\t%s\n", line)
 	}
 }
 func scalingList(b *BitReader, rbsp []byte, scalingList []int, sizeOfScalingList int, defaultScalingMatrix []int) {

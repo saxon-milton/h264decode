@@ -95,14 +95,12 @@ func CondTermFlag(mbAddr, mbSkipFlag int) int {
 }
 
 // s9.3.3 p 278: Returns the value of the syntax element
-func (bin *Binarization) Decode(b *BitReader, sliceContext *SliceContext, rbsp []byte) int {
-	binString := []int{}
+func (bin *Binarization) Decode(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 	if bin.SyntaxElement == "MbType" {
-		binString = binIdxMbMap[sliceContext.Slice.Data.SliceTypeName][sliceContext.Slice.Data.MbType]
+		bin.binString = binIdxMbMap[sliceContext.Slice.Data.SliceTypeName][sliceContext.Slice.Data.MbType]
 	} else {
 		logger.Printf("TODO: no means to find binString for %s\n", bin.SyntaxElement)
 	}
-	return binString[0]
 }
 
 // 9.3.3.1.1 : returns ctxIdxInc
@@ -277,6 +275,7 @@ type Binarization struct {
 	CtxIdxOffset
 	UseDecodeBypass int
 	binIdx          int
+	binString       []int
 }
 type BinarizationType struct {
 	PrefixSuffix   bool
@@ -289,10 +288,10 @@ type BinarizationType struct {
 	CMaxValue int
 }
 
-func NewBinarization(syntaxElement string, data *SliceData) Binarization {
+func NewBinarization(syntaxElement string, data *SliceData) *Binarization {
 	sliceTypeName := data.SliceTypeName
 	logger.Printf("NewBinarization for %s in sliceType %s\n", syntaxElement, sliceTypeName)
-	binarization := Binarization{SyntaxElement: syntaxElement}
+	binarization := &Binarization{SyntaxElement: syntaxElement}
 	switch syntaxElement {
 	case "CodedBlockPattern":
 		binarization.BinarizationType = BinarizationType{PrefixSuffix: true}

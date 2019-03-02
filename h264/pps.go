@@ -38,8 +38,8 @@ type PPS struct {
 }
 
 func NewPPS(sps *SPS, rbsp []byte) PPS {
-	fmt.Printf(" == PPS RBSP %d bytes %d bits == \n", len(rbsp), len(rbsp)*8)
-	fmt.Printf(" == %#v\n", rbsp[0:8])
+	logger.Printf("== PPS RBSP %d bytes %d bits == \n", len(rbsp), len(rbsp)*8)
+	logger.Printf("\t%#v\n", rbsp[0:8])
 	pps := PPS{}
 	b := &BitReader{}
 
@@ -100,7 +100,9 @@ func NewPPS(sps *SPS, rbsp []byte) PPS {
 	pps.ConstrainedIntraPred = flagField()
 	pps.RedundantPicCntPresent = flagField()
 
+	logger.Printf("\tChecking for more PPS data")
 	if b.HasMoreData(rbsp) {
+		logger.Printf("\tProcessing additional PPS data")
 		pps.Transform8x8Mode = nextField("Transform8x8ModeFlag", 1)
 		pps.PicScalingMatrixPresent = flagField()
 		if pps.PicScalingMatrixPresent {
@@ -130,6 +132,7 @@ func NewPPS(sps *SPS, rbsp []byte) PPS {
 			}
 			pps.SecondChromaQpIndexOffset = se(b.golomb(rbsp))
 		}
+		b.MoreRBSPData(rbsp)
 		// rbspTrailingBits()
 	}
 

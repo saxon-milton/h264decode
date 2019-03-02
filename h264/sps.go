@@ -190,8 +190,8 @@ func scalingList(b *BitReader, rbsp []byte, scalingList []int, sizeOfScalingList
 	}
 }
 func NewSPS(rbsp []byte) SPS {
-	fmt.Printf(" == SPS RBSP %d bytes %d bits == \n", len(rbsp), len(rbsp)*8)
-	fmt.Printf(" == %#v\n", rbsp[0:8])
+	logger.Printf(" == SPS RBSP %d bytes %d bits == \n", len(rbsp), len(rbsp)*8)
+	logger.Printf("\t== %#v\n", rbsp[0:8])
 	sps := SPS{}
 	b := &BitReader{}
 	// Byte 0
@@ -199,7 +199,7 @@ func NewSPS(rbsp []byte) SPS {
 		buf := make([]int, bits)
 		_, err := b.Read(rbsp, buf)
 		if err != nil {
-			fmt.Printf("error reading bits for %s: %v\n", name, err)
+			logger.Printf("error reading bits for %s: %v\n", name, err)
 			return -1
 		}
 
@@ -266,7 +266,7 @@ func NewSPS(rbsp []byte) SPS {
 			if sps.ChromaFormat != 3 {
 				max = 8
 			}
-			fmt.Printf("building Scaling matrix for %d elements\n", max)
+			logger.Printf("\tbuilding Scaling matrix for %d elements\n", max)
 			for i := 0; i < max; i++ {
 				if v := nextField(fmt.Sprintf("SeqScalingListPresentFlag[%d]", i), 1); v == 1 {
 					sps.SeqScalingList = append(sps.SeqScalingList, true)

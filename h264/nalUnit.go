@@ -1,7 +1,5 @@
 package h264
 
-import "fmt"
-
 type NalUnit struct {
 	NumBytes             int
 	ForbiddenZeroBit     int
@@ -64,8 +62,7 @@ func NalUnitHeaderMvcExtension(nalUnit *NalUnit, b *BitReader, frame []byte) {
 }
 
 func NewNalUnit(frame []byte) NalUnit {
-	fmt.Printf("== NalUnit %d\n", len(frame))
-	fmt.Printf(" == %#v\n", frame[0:8])
+	logger.Printf("== NalUnit: %d bytes\n", len(frame))
 	nalUnit := NalUnit{
 		NumBytes:    len(frame),
 		HeaderBytes: 1,
@@ -103,5 +100,6 @@ func NewNalUnit(frame []byte) NalUnit {
 		}
 	}
 
+	logger.Printf("\tNalUnitType: %s\n", NALUnitType[nalUnit.Type])
 	return nalUnit
 }

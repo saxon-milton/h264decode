@@ -26,6 +26,9 @@ func NewStreamReader(r io.Reader, request, done chan int) *StreamReader {
 		BitStreamChan: make(chan []int, 1),
 	}
 }
+func (s *StreamReader) LogStreamPosition() {
+	logger.Printf("debug: stream position: %d bytes : %d bits\n", s.byteOffset, s.bitOffset)
+}
 func (s *StreamReader) FillCache(buf []byte) {
 	for _, b := range buf {
 		s.bitCache = append(s.bitCache, degolomb.BitArray(b)...)
@@ -43,6 +46,18 @@ func (s *StreamReader) DrainCache(bitCount int) int {
 
 	return bitCount - len(s.bitCache)
 }
+func (s *StreamReader) GetByte(cnt int) []byte {
+	if s.bitOffset != 0 {
+		logger.Printf("warning: misaligned byte request\n")
+		s.LogStreamPosition()
+	}
+	buf := make([]byte, cnt)
+	_, err := s.Reader.Read(buf)
+	if err != nil {
+		logger.Printf("error: while getting %d bytes: %v\n", cnt, err)
+	}
+	return buf
+}
 
 func (s *StreamReader) Stream() {
 	for request := range s.moreBitsChan {
@@ -51,7 +66,7 @@ func (s *StreamReader) Stream() {
 		// which we need to request
 		bitCount := s.DrainCache(request)
 		if bitCount == 0 {
-			return
+			continue
 		}
 
 		byteCnt := bitCount / 8

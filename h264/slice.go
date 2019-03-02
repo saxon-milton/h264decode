@@ -257,7 +257,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 						sliceContext.Slice.Data)
 					binarization.Decode(sliceContext, b, rbsp)
 
-					fmt.Printf("TODO: ae for PevIntra4x4PredModeFlag[%d]\n", luma4x4BlkIdx)
+					logger.Printf("TODO: ae for PevIntra4x4PredModeFlag[%d]\n", luma4x4BlkIdx)
 				} else {
 					v = NextField(fmt.Sprintf("PrevIntra4x4PredModeFlag[%d]", luma4x4BlkIdx), 1, b, rbsp)
 				}
@@ -272,7 +272,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 							sliceContext.Slice.Data)
 						binarization.Decode(sliceContext, b, rbsp)
 
-						fmt.Printf("TODO: ae for RemIntra4x4PredMode[%d]\n", luma4x4BlkIdx)
+						logger.Printf("TODO: ae for RemIntra4x4PredMode[%d]\n", luma4x4BlkIdx)
 					} else {
 						v = NextField(fmt.Sprintf("RemIntra4x4PredMode[%d]", luma4x4BlkIdx), 3, b, rbsp)
 					}
@@ -294,7 +294,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 					binarization := NewBinarization("PrevIntra8x8PredModeFlag", sliceContext.Slice.Data)
 					binarization.Decode(sliceContext, b, rbsp)
 
-					fmt.Printf("TODO: ae for PrevIntra8x8PredModeFlag[%d]\n", luma8x8BlkIdx)
+					logger.Printf("TODO: ae for PrevIntra8x8PredModeFlag[%d]\n", luma8x8BlkIdx)
 				} else {
 					v = NextField(fmt.Sprintf("PrevIntra8x8PredModeFlag[%d]", luma8x8BlkIdx), 1, b, rbsp)
 				}
@@ -308,7 +308,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 							sliceContext.Slice.Data)
 						binarization.Decode(sliceContext, b, rbsp)
 
-						fmt.Printf("TODO: ae for RemIntra8x8PredMode[%d]\n", luma8x8BlkIdx)
+						logger.Printf("TODO: ae for RemIntra8x8PredMode[%d]\n", luma8x8BlkIdx)
 					} else {
 						v = NextField(fmt.Sprintf("RemIntra8x8PredMode[%d]", luma8x8BlkIdx), 3, b, rbsp)
 					}
@@ -330,7 +330,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 					sliceContext.Slice.Data)
 				binarization.Decode(sliceContext, b, rbsp)
 
-				fmt.Printf("TODO: ae for IntraChromaPredMode\n")
+				logger.Printf("TODO: ae for IntraChromaPredMode\n")
 			} else {
 				sliceContext.Slice.Data.IntraChromaPredMode = ue(b.golomb(rbsp))
 			}
@@ -340,7 +340,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 		for mbPartIdx := 0; mbPartIdx < NumMbPart(sliceContext.NalUnit, sliceContext.SPS, sliceContext.Slice.Header, sliceContext.Slice.Data); mbPartIdx++ {
 			sliceContext.Update(sliceContext.Slice.Header, sliceContext.Slice.Data)
 			if (sliceContext.Slice.Header.NumRefIdxL0ActiveMinus1 > 0 || sliceContext.Slice.Data.MbFieldDecodingFlag != sliceContext.Slice.Header.FieldPic) && MbPartPredMode(sliceContext.Slice.Data, sliceType, sliceContext.Slice.Data.MbType, mbPartIdx) != "Pred_L1" {
-				fmt.Printf("\tTODO: refIdxL0[%d] te or ae(v)\n", mbPartIdx)
+				logger.Printf("\tTODO: refIdxL0[%d] te or ae(v)\n", mbPartIdx)
 				if len(sliceContext.Slice.Data.RefIdxL0) < mbPartIdx {
 					sliceContext.Slice.Data.RefIdxL0 = append(
 						sliceContext.Slice.Data.RefIdxL0, make([]int, mbPartIdx-len(sliceContext.Slice.Data.RefIdxL0)+1)...)
@@ -352,7 +352,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 						sliceContext.Slice.Data)
 					binarization.Decode(sliceContext, b, rbsp)
 
-					fmt.Printf("TODO: ae for RefIdxL0[%d]\n", mbPartIdx)
+					logger.Printf("TODO: ae for RefIdxL0[%d]\n", mbPartIdx)
 				} else {
 					// TODO: Only one reference picture is used for inter-prediction,
 					// then the value should be 0
@@ -397,7 +397,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 							binarization.Decode(sliceContext, b, rbsp)
 
 						}
-						fmt.Printf("TODO: ae for MvdL0[%d][0][%d]\n", mbPartIdx, compIdx)
+						logger.Printf("TODO: ae for MvdL0[%d][0][%d]\n", mbPartIdx, compIdx)
 					} else {
 						sliceContext.Slice.Data.MvdL0[mbPartIdx][0][compIdx] = se(b.golomb(rbsp))
 					}
@@ -433,7 +433,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 
 						}
 						// TODO: se(v) or ae(v)
-						fmt.Printf("TODO: ae for MvdL1[%d][0][%d]\n", mbPartIdx, compIdx)
+						logger.Printf("TODO: ae for MvdL1[%d][0][%d]\n", mbPartIdx, compIdx)
 					} else {
 						sliceContext.Slice.Data.MvdL1[mbPartIdx][0][compIdx] = se(b.golomb(rbsp))
 					}
@@ -559,25 +559,25 @@ func MbaffFrameFlag(sps *SPS, header *SliceHeader) int {
 }
 
 func NextField(name string, bits int, b *BitReader, rbsp []byte) int {
-	fmt.Printf("\t[%s] %d bits\n", name, bits)
+	logger.Printf("\t[%s] %d bits\n", name, bits)
 	buf := make([]int, bits)
 	if _, err := b.Read(rbsp, buf); err != nil {
-		fmt.Printf("error reading %d bits for %s: %v\n", bits, name, err)
+		logger.Printf("error reading %d bits for %s: %v\n", bits, name, err)
 		return -1
 	}
 	return bitVal(buf)
 }
 
 func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceData {
-	fmt.Printf("== SliceData starts at ByteOffset: %d BitOffset %d\n", b.byteOffset, b.bitOffset)
-	fmt.Printf("== %d bytes remain ==\n", len(rbsp)-b.byteOffset)
+	logger.Printf("== SliceData starts at ByteOffset: %d BitOffset %d\n", b.byteOffset, b.bitOffset)
+	logger.Printf("\t== %d bytes remain ==\n", len(rbsp)-b.byteOffset)
 	sliceContext.Slice.Data = &SliceData{}
 	nextField := func(name string, bits int) int {
-		fmt.Printf("\tget %d bits for %s\n", bits, name)
+		logger.Printf("\tget %d bits for %s\n", bits, name)
 		buf := make([]int, bits)
 		_, err := b.Read(rbsp, buf)
 		if err != nil {
-			fmt.Printf("error reading bits for %s: %v\n", name, err)
+			logger.Printf("error reading bits for %s: %v\n", name, err)
 			return -1
 		}
 
@@ -637,7 +637,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 					binarization := NewBinarization("MbFieldDecodingFlag", sliceContext.Slice.Data)
 					binarization.Decode(sliceContext, b, rbsp)
 
-					fmt.Printf("TODO: ae for MbFieldDecodingFlag\n")
+					logger.Printf("TODO: ae for MbFieldDecodingFlag\n")
 				} else {
 					sliceContext.Slice.Data.MbFieldDecodingFlag = flagField()
 				}
@@ -649,7 +649,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 				binarization := NewBinarization("MbType", sliceContext.Slice.Data)
 				binarization.Decode(sliceContext, b, rbsp)
 
-				fmt.Printf("TODO: ae for MBType\n")
+				logger.Printf("TODO: ae for MBType\n")
 			} else {
 				sliceContext.Slice.Data.MbType = ue(b.golomb(rbsp))
 			}
@@ -687,7 +687,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 			} else {
 				noSubMbPartSizeLessThan8x8Flag := 1
 				if sliceContext.Slice.Data.MbTypeName == "I_NxN" && MbPartPredMode(sliceContext.Slice.Data, sliceContext.Slice.Data.SliceTypeName, sliceContext.Slice.Data.MbType, 0) != "Intra_16x16" && NumMbPart(sliceContext.NalUnit, sliceContext.SPS, sliceContext.Slice.Header, sliceContext.Slice.Data) == 4 {
-					fmt.Printf("\tTODO: subMbPred\n")
+					logger.Printf("\tTODO: subMbPred\n")
 					/*
 						subMbType := SubMbPred(sliceContext.Slice.Data.MbType)
 						for mbPartIdx := 0; mbPartIdx < 4; mbPartIdx++ {
@@ -709,7 +709,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 							binarization := NewBinarization("TransformSize8x8Flag", sliceContext.Slice.Data)
 							binarization.Decode(sliceContext, b, rbsp)
 
-							fmt.Println("TODO: ae(v) for TransformSize8x8Flag")
+							logger.Println("TODO: ae(v) for TransformSize8x8Flag")
 						} else {
 							sliceContext.Slice.Data.TransformSize8x8Flag = flagField()
 						}
@@ -718,12 +718,12 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 				}
 				if MbPartPredMode(sliceContext.Slice.Data, sliceContext.Slice.Data.SliceTypeName, sliceContext.Slice.Data.MbType, 0) != "Intra_16x16" {
 					// TODO: me, ae
-					fmt.Printf("TODO: CodedBlockPattern pending me/ae implementation\n")
+					logger.Printf("TODO: CodedBlockPattern pending me/ae implementation\n")
 					if sliceContext.PPS.EntropyCodingMode == 1 {
 						binarization := NewBinarization("CodedBlockPattern", sliceContext.Slice.Data)
 						binarization.Decode(sliceContext, b, rbsp)
 
-						fmt.Printf("TODO: ae for CodedBlockPattern\n")
+						logger.Printf("TODO: ae for CodedBlockPattern\n")
 					} else {
 						sliceContext.Slice.Data.CodedBlockPattern = me(
 							b.golomb(rbsp),
@@ -738,7 +738,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 							binarization := NewBinarization("Transform8x8Flag", sliceContext.Slice.Data)
 							binarization.Decode(sliceContext, b, rbsp)
 
-							fmt.Printf("TODO: ae for TranformSize8x8Flag\n")
+							logger.Printf("TODO: ae for TranformSize8x8Flag\n")
 						} else {
 							sliceContext.Slice.Data.TransformSize8x8Flag = flagField()
 						}
@@ -750,7 +750,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 						binarization := NewBinarization("MbQpDelta", sliceContext.Slice.Data)
 						binarization.Decode(sliceContext, b, rbsp)
 
-						fmt.Printf("TODO: ae for MbQpDelta\n")
+						logger.Printf("TODO: ae for MbQpDelta\n")
 					} else {
 						sliceContext.Slice.Data.MbQpDelta = se(b.golomb(rbsp))
 					}
@@ -790,8 +790,8 @@ func (c *SliceContext) Update(header *SliceHeader, data *SliceData) {
 }
 
 func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceContext {
-	fmt.Printf(" == %s RBSP %d bytes %d bits == \n", NALUnitType[nalUnit.Type], len(rbsp), len(rbsp)*8)
-	fmt.Printf(" == %#v\n", rbsp[0:8])
+	logger.Printf("== %s RBSP %d bytes %d bits == \n", NALUnitType[nalUnit.Type], len(rbsp), len(rbsp)*8)
+	logger.Printf("\t== %#v\n", rbsp[0:8])
 	var idrPic bool
 	if nalUnit.Type == 5 {
 		idrPic = true
@@ -804,11 +804,11 @@ func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceCo
 	}
 	b := &BitReader{}
 	nextField := func(name string, bits int) int {
-		fmt.Printf("\tget %d bits for %s\n", bits, name)
+		logger.Printf("\tget %d bits for %s\n", bits, name)
 		buf := make([]int, bits)
 		_, err := b.Read(rbsp, buf)
 		if err != nil {
-			fmt.Printf("error reading bits for %s: %v\n", name, err)
+			logger.Printf("error reading bits for %s: %v\n", name, err)
 			return -1
 		}
 
@@ -823,7 +823,7 @@ func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceCo
 	header.FirstMbInSlice = ue(b.golomb(rbsp))
 	header.SliceType = ue(b.golomb(rbsp))
 	sliceType := sliceTypeMap[header.SliceType]
-	fmt.Printf("== %s (%s) slice of %d bytes\n", NALUnitType[nalUnit.Type], sliceType, len(rbsp))
+	logger.Printf("== %s (%s) slice of %d bytes\n", NALUnitType[nalUnit.Type], sliceType, len(rbsp))
 	header.PPSID = ue(b.golomb(rbsp))
 	if sps.UseSeparateColorPlane {
 		header.ColorPlaneID = nextField("ColorPlaneID", 2)

@@ -2,170 +2,161 @@ package h264
 
 import (
 	// "github.com/nareix/joy4/av"
-	"github.com/nareix/joy4/codec/h264parser"
+	// 	"github.com/nareix/joy4/codec/h264parser"
 	// "github.com/nareix/joy4/format/ts"
+	"bytes"
 	"io"
 	"log"
 	"net"
 	"os"
-	"sync"
+	"os/signal"
 )
 
 // InitialNALU indicates the start of a h264 packet
 // 0 - Forbidden 0 bit; always 0
 // 1,2 - NRI
 // 3,4,5,6,7 - Type
-var InitialNALU = []byte{0, 0, 0, 1}
-var logger *log.Logger
+var (
+	InitialNALU   = []byte{0, 0, 0, 1}
+	Initial3BNALU = []byte{0, 0, 1}
+	logger        *log.Logger
+	streamOffset  = 0
+)
 
-type counter struct{ c int }
+type RBSPReader struct {
+	BitStream      chan []int
+	BitRequestLine chan int
+	*StreamReader
+}
 
 func init() {
-	logger = log.New(os.Stderr, "streamer ", log.Lshortfile)
+	logger = log.New(os.Stderr, "streamer ", log.Lshortfile|log.Lmicroseconds)
 }
-func isNALU(packet []byte) bool {
+func isStartSequence(packet []byte) bool {
 	if len(packet) < len(InitialNALU) {
 		return false
 	}
-	// The first NALU is a 4 byte packet, all others have the NALU
-	// in the packet's tailing 4 bytes
 	naluSegment := packet[len(packet)-4:]
 	for i := range InitialNALU {
 		if naluSegment[i] != InitialNALU[i] {
-			/*
-				if len(packet) <= 32 {
-					logger.Printf("\t not NALU %v\n", packet)
-				}
-			*/
 			return false
 		}
 	}
-	/*
-		if len(packet) <= 32 {
-			logger.Printf("\t found NALU %v\n", packet)
-		}
-	*/
 	return true
 }
-
-// read bytes until a new header appears
-func h264SegmentReader(r io.Reader) ([]byte, error) {
-	packet := []byte{}
-	byteCounter := 0
-	for !isNALU(packet) {
-		buf := make([]byte, 1)
-		n, err := r.Read(buf)
-		byteCounter += n
-		packet = append(packet, buf...)
-		if err != nil {
-			return packet, err
+func isEmpty3Byte(buf []byte) bool {
+	if len(buf) < 3 {
+		return false
+	}
+	for _, i := range buf[len(buf)-3:] {
+		if i != 0 {
+			return false
 		}
 	}
-	logger.Printf("read %d byte h264 segment\n", len(packet))
-	return packet, nil
+	return true
 }
-
-// read bytes between packets
-func h264Demuxer(r io.Reader, frames chan []byte) {
-	// Read the opening NALU
-	packet, err := h264SegmentReader(r)
-	if err != nil {
-		logger.Printf("head segment error %v\n", err)
-		frames <- packet
-		close(frames)
-		return
+func isStartCodeOnePrefix(buf []byte) bool {
+	for i, b := range buf {
+		if i < 2 && b != byte(0) {
+			return false
+		}
+		// byte 3 may be 0 or 1
+		if i == 3 && b != byte(0) || b != byte(1) {
+			return false
+		}
 	}
-	packetCounter := 0
-	logger.Printf("read opening %d byte NALU boundary\n", len(packet))
-	// Packet is exactly a 4 byte NALU
-	for {
-		// Read the frame to the next NALU boundary
-		segment, err := h264SegmentReader(r)
-		packet = append(packet, segment...)
+	logger.Printf("debug: found start code one prefix byte\n")
+	return true
+}
+func readNalUnit(r *RBSPReader) *NalUnit {
+	nalUnitBuffer := &bytes.Buffer{}
+	// for !isEmpty3Byte(nalUnitBuffer.Bytes()) && !isStartSequence(nalUnitBuffer.Bytes()) {
+	for !isStartSequence(nalUnitBuffer.Bytes()) {
+		if buf, err := r.GetBytes(1); err != nil {
+			r.LogStreamPosition()
+			r.endStreamChan <- 1
+			return nil
+		} else {
+			nalUnitBuffer.Write(buf)
+		}
+	}
+	// Annex B.2 Step 1
+	//	_, _ = r.GetBytes(1)
+	// Annex B.2 Step 2
+	//	_, _ = r.GetBytes(3)
+	r.LogStreamPosition()
+
+	// Read the nalUnit
+	nalUnitReader := &RBSPReader{BitRequestLine: make(chan int, 1)}
+	endNaluChan := make(chan int, 1)
+	nalUnitStream := NewStreamReader(nalUnitBuffer, nalUnitReader.BitRequestLine, endNaluChan)
+	nalUnitStream.streamFile = r.streamFile
+	nalUnitReader.StreamReader = nalUnitStream
+	nalUnitReader.BitStream = nalUnitStream.BitStreamChan
+	go nalUnitStream.Stream()
+	logger.Printf("debug: found NALU unit with %d bytes\n\t%#v",
+		nalUnitBuffer.Len(),
+		nalUnitBuffer.Bytes()[nalUnitBuffer.Len()-4:])
+	if isStartCodeOnePrefix(nalUnitBuffer.Bytes()[nalUnitBuffer.Len()-3:]) {
+		logger.Printf("info: Nal unit ends in 0x000000 or 0x000001: %#v\n",
+			nalUnitBuffer.Bytes()[nalUnitBuffer.Len()-3:])
+	}
+	nalUnit := NewNalUnit(nalUnitReader, nalUnitBuffer.Len()-4)
+	endNaluChan <- 1
+	return nalUnit
+}
+func (r *RBSPReader) Run() {
+	rbsp := []byte{}
+	// Find start of stream
+	for !isStartSequence(rbsp) {
+		buf, err := r.GetBytes(1)
 		if err != nil {
-			logger.Printf("error demuxing: %v\n", err)
-			frames <- packet
-			close(frames)
+			r.endStreamChan <- 1
 			return
 		}
-		// Remove the header of the next packet
-		packet = packet[0 : len(packet)-4]
-		// logger.Printf("(%d) packet %v\n", packetCounter, packet)
-		frames <- packet
-		packetCounter++
-		// Add the NALU header to the next packet
-		packet = append([]byte{}, InitialNALU...)
+		rbsp = append(rbsp, buf...)
+	}
+
+	for {
+		_ = readNalUnit(r)
+		// End read the nalUnit
+		r.LogStreamPosition()
+		logger.Printf("info: read NAL unit\n")
 	}
 }
 
-/*func isSPSFrame(frame []byte) (h264.SPSInfo, error) {
-	return h264.ParseSPS(frame)
-}*/
-
-func decodeFrame(frame []byte) error {
-	codecData, err := h264parser.NewCodecDataFromSPSAndPPS(frame, frame)
+func handleConnection(connection io.Reader) {
+	logger.Printf("debug: handling connection\n")
+	streamFilename := "/home/bruce/devel/go/src/github.com/mrmod/cvnightlife/output.mp4"
+	endStreamChan := make(chan int, 1)
+	_ = os.Remove(streamFilename)
+	streamFile, err := os.Create(streamFilename)
 	if err != nil {
-		logger.Printf("codec error %s\n", err)
-		return err
-	}
-	_ = codecData
-	/*
-		logger.Printf("\t%v NALRefIDC: %d %s\n", frame[4], nalRefIDC(frame), NALRefIDC[nalRefIDC(frame)])
-		logger.Printf("\t%v NALUnitType %d %s\n", frame[4], nalUnitType(frame), NALUnitType[nalUnitType(frame)])
-		logger.Printf("\tframe (h, w) (%d, %d)\n", codecData.Height(), codecData.Width())
-		logger.Printf("\tcodec type %v\n", codecData.Type())
-	*/
-	return nil
-}
-
-func handleConnection(frameCounter *counter, h264stream io.Reader) {
-	var sps SPS
-	var pps PPS
-	frameFile, err := os.OpenFile("output.mp4", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		logger.Printf("Failed to open output.mp4: %v\n", err)
-		return
+		panic(err)
 	}
 
-	defer frameFile.Close()
-	frames := make(chan []byte, 1)
-	wg := sync.WaitGroup{}
-	wg.Add(1)
+	c := make(chan os.Signal, 1)
+	signal.Notify(c)
 	go func() {
-		for frame := range frames {
-			// Drop leading 0x0, 0x0, 0x1, NALUTypeByte
-			nalUnit := NewNalUnit(frame[4:])
-			rbsp := NewRBSP(frame)
-			// logger.Printf("\tnaluType: %v :: %v\n", nalUnitType(frame), nalRefIDC(frame))
-			logger.Printf("NALUTYPE: %d FRAME: %d RBSP: %d\n", nalUnit.Type, frameCounter.c, len(rbsp))
-			// logger.Printf("\t%s", NALUnitType[nalUnit.Type])
-			// logger.Printf("NalUnit: %+v\n", nalUnit)
-			switch nalUnit.Type {
-			case NALU_TYPE_SPS:
-				sps = NewSPS(rbsp)
-			case NALU_TYPE_PPS:
-				pps = NewPPS(&sps, rbsp)
-			case NALU_TYPE_SLICE_IDR_PICTURE:
-				_ = NewSliceContext(&nalUnit, &sps, &pps, rbsp)
-			case NALU_TYPE_SLICE_NON_IDR_PICTURE:
-				_ = NewSliceContext(&nalUnit, &sps, &pps, rbsp)
-			default:
-				logger.Printf("== SKIP: %d:%s\n", nalUnit.Type, NALUnitType[nalUnit.Type])
-			}
-
-			_, _ = frameFile.Write(frame)
-			err = decodeFrame(frame)
-			frameCounter.c += 1
-		}
-		wg.Done()
+		logger.Printf("debug: waiting on signals\n")
+		s := <-c
+		logger.Printf("info: %v received, closing stream file\n", s)
+		streamFile.Close()
+		os.Exit(0)
 	}()
-	go h264Demuxer(h264stream, frames)
-	wg.Wait()
-	logger.Printf("read %d frames\n", frameCounter.c)
+	rbspReader := &RBSPReader{BitRequestLine: make(chan int, 1)}
+	streamReader := NewStreamReader(connection, rbspReader.BitRequestLine, endStreamChan)
+	streamReader.streamFile = streamFile
+	rbspReader.StreamReader = streamReader
+	rbspReader.BitStream = streamReader.BitStreamChan
+	// Handle bit arrays and allow requests for bits
+	go rbspReader.Run()
+	// Blocking
+	streamReader.Stream()
 }
+
 func ByteStreamReader(connection net.Conn) {
 	logger.Printf("opened bytestream\n")
-	frameCounter := &counter{0}
 	defer connection.Close()
-	handleConnection(frameCounter, connection)
+	handleConnection(connection)
 }

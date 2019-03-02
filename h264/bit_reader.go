@@ -162,6 +162,7 @@ func (b *BitReader) golomb(ib []byte) []int {
 
 // TODO: MoreRBSPData Section 7.2 p 62
 func (b *BitReader) MoreRBSPData(ib []byte) bool {
+	logger.Printf("moreRBSPData: %d [byteO: %d, bitO: %d]\n", len(ib), b.byteOffset, b.bitOffset)
 	if len(ib)-b.byteOffset == 0 {
 		return false
 	}
@@ -173,18 +174,18 @@ func (b *BitReader) MoreRBSPData(ib []byte) bool {
 	cnt := 0
 	for buf[0] != 1 {
 		if _, err := b.Read(ib, buf); err != nil {
-			fmt.Printf("moreRBSPData error: %v\n", err)
+			logger.Printf("moreRBSPData error: %v\n", err)
 			return false
 		}
 		cnt++
 	}
-	fmt.Printf("moreRBSPData: read %d additional bits\n", cnt)
-	return cnt > 1
+	logger.Printf("moreRBSPData: read %d additional bits\n", cnt)
+	return cnt > 0
 }
 func (b *BitReader) HasMoreData(ib []byte) bool {
-	fmt.Printf("\tHasMoreData: %+v\n", b)
-	fmt.Printf("\tHas %d more bytes\n", len(ib)-b.byteOffset)
-	return len(ib)-b.byteOffset == 0
+	logger.Printf("\tHasMoreData: %+v\n", b)
+	logger.Printf("\tHas %d more bytes\n", len(ib)-b.byteOffset)
+	return len(ib)-b.byteOffset > 0
 }
 
 func (b *BitReader) IsByteAligned() bool {
@@ -224,12 +225,11 @@ func (b *BitReader) Read(ib []byte, buf []int) (int, error) {
 
 }
 func (b *BitReader) NextField(name string, bits int, ib []byte) int {
-	fmt.Printf("\t[%s] %d bits ", name, bits)
 	buf := make([]int, bits)
 	if _, err := b.Read(ib, buf); err != nil {
 		fmt.Printf("error reading %d bits for %s: %v\n", bits, name, err)
 		return -1
 	}
-	fmt.Printf("%d\n", bitVal(buf))
+	logger.Printf("\t[%s] %d bits = value[%d]\n", name, bits, bitVal(buf))
 	return bitVal(buf)
 }

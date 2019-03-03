@@ -4,7 +4,6 @@ import (
 	// "github.com/nareix/joy4/av"
 	// 	"github.com/nareix/joy4/codec/h264parser"
 	// "github.com/nareix/joy4/format/ts"
-	"bytes"
 	"io"
 	"log"
 	"net"
@@ -22,12 +21,6 @@ var (
 	logger        *log.Logger
 	streamOffset  = 0
 )
-
-type RBSPReader struct {
-	BitStream      chan []int
-	BitRequestLine chan int
-	*StreamReader
-}
 
 func init() {
 	logger = log.New(os.Stderr, "streamer ", log.Lshortfile|log.Lmicroseconds)
@@ -68,67 +61,57 @@ func isStartCodeOnePrefix(buf []byte) bool {
 	logger.Printf("debug: found start code one prefix byte\n")
 	return true
 }
-func readNalUnit(r *RBSPReader) *NalUnit {
-	nalUnitBuffer := &bytes.Buffer{}
-	// for !isEmpty3Byte(nalUnitBuffer.Bytes()) && !isStartSequence(nalUnitBuffer.Bytes()) {
-	for !isStartSequence(nalUnitBuffer.Bytes()) {
-		if buf, err := r.GetBytes(1); err != nil {
-			r.LogStreamPosition()
-			r.endStreamChan <- 1
-			return nil
-		} else {
-			nalUnitBuffer.Write(buf)
-		}
-	}
-	// Annex B.2 Step 1
-	//	_, _ = r.GetBytes(1)
-	// Annex B.2 Step 2
-	//	_, _ = r.GetBytes(3)
+func readNalUnit(r *H264Reader) *NalUnit {
+	// Read to start of NAL
+	logger.Printf("debug: Seeking NAL start\n")
 	r.LogStreamPosition()
-
-	// Read the nalUnit
-	nalUnitReader := &RBSPReader{BitRequestLine: make(chan int, 1)}
-	endNaluChan := make(chan int, 1)
-	nalUnitStream := NewStreamReader(nalUnitBuffer, nalUnitReader.BitRequestLine, endNaluChan)
-	nalUnitStream.streamFile = r.streamFile
-	nalUnitReader.StreamReader = nalUnitStream
-	nalUnitReader.BitStream = nalUnitStream.BitStreamChan
-	go nalUnitStream.Stream()
-	logger.Printf("debug: found NALU unit with %d bytes\n\t%#v",
-		nalUnitBuffer.Len(),
-		nalUnitBuffer.Bytes()[nalUnitBuffer.Len()-4:])
-	if isStartCodeOnePrefix(nalUnitBuffer.Bytes()[nalUnitBuffer.Len()-3:]) {
-		logger.Printf("info: Nal unit ends in 0x000000 or 0x000001: %#v\n",
-			nalUnitBuffer.Bytes()[nalUnitBuffer.Len()-3:])
-	}
-	nalUnit := NewNalUnit(nalUnitReader, nalUnitBuffer.Len()-4)
-	endNaluChan <- 1
-	return nalUnit
-}
-func (r *RBSPReader) Run() {
-	rbsp := []byte{}
-	// Find start of stream
-	for !isStartSequence(rbsp) {
-		buf, err := r.GetBytes(1)
-		if err != nil {
-			r.endStreamChan <- 1
-			return
+	for !isStartSequence(r.Bytes()) {
+		if err := r.BufferToReader(1); err != nil {
+			return nil
 		}
-		rbsp = append(rbsp, buf...)
 	}
-
-	for {
-		_ = readNalUnit(r)
-		// End read the nalUnit
-		r.LogStreamPosition()
-		logger.Printf("info: read NAL unit\n")
+	/*
+		if !r.IsStarted {
+			logger.Printf("debug: skipping initial NAL zero byte spaces\n")
+			r.LogStreamPosition()
+			// Annex B.2 Step 1
+			if err := r.Discard(1); err != nil {
+				logger.Printf("error: while discarding empty byte (Annex B.2:1): %v\n", err)
+				return nil
+			}
+			if err := r.Discard(2); err != nil {
+				logger.Printf("error: while discarding start code prefix one 3bytes (Annex B.2:2): %v\n", err)
+				return nil
+			}
+		}
+	*/
+	_, startOffset, _ := r.StreamPosition()
+	logger.Printf("debug: Seeking next NAL start\n")
+	r.LogStreamPosition()
+	// Read to start of next NAL
+	_, so, _ := r.StreamPosition()
+	for so == startOffset || !isStartSequence(r.Bytes()) {
+		_, so, _ = r.StreamPosition()
+		if err := r.BufferToReader(1); err != nil {
+			return nil
+		}
 	}
+	logger.Printf("debug: PreRewind %#v\n", r.Bytes())
+	// Rewind back the length of the start sequence
+	r.RewindBytes(4)
+	logger.Printf("debug: PostRewind %#v\n", r.Bytes())
+	_, endOffset, _ := r.StreamPosition()
+	logger.Printf("debug: found NAL unit with %d bytes from %d to %d\n", endOffset-startOffset, startOffset, endOffset)
+	nalUnitBytes := r.Bytes()[startOffset:]
+	r.LogStreamPosition()
+	logger.Printf("debug: NALU: %#v\n", nalUnitBytes[0:8])
+	nalUnit := NewNalUnit(nalUnitBytes)
+	return nalUnit
 }
 
 func handleConnection(connection io.Reader) {
 	logger.Printf("debug: handling connection\n")
 	streamFilename := "/home/bruce/devel/go/src/github.com/mrmod/cvnightlife/output.mp4"
-	endStreamChan := make(chan int, 1)
 	_ = os.Remove(streamFilename)
 	streamFile, err := os.Create(streamFilename)
 	if err != nil {
@@ -144,15 +127,15 @@ func handleConnection(connection io.Reader) {
 		streamFile.Close()
 		os.Exit(0)
 	}()
-	rbspReader := &RBSPReader{BitRequestLine: make(chan int, 1)}
-	streamReader := NewStreamReader(connection, rbspReader.BitRequestLine, endStreamChan)
-	streamReader.streamFile = streamFile
-	rbspReader.StreamReader = streamReader
-	rbspReader.BitStream = streamReader.BitStreamChan
-	// Handle bit arrays and allow requests for bits
-	go rbspReader.Run()
-	// Blocking
-	streamReader.Stream()
+	streamReader := &H264Reader{
+		Stream:    connection,
+		BitReader: &BitReader{bytes: []byte{}},
+	}
+	nalUnit := readNalUnit(streamReader)
+	switch nalUnit.Type {
+	case NALU_TYPE_SPS:
+		_ = NewSPS(nalUnit.rbsp)
+	}
 }
 
 func ByteStreamReader(connection net.Conn) {

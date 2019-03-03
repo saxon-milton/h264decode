@@ -37,73 +37,62 @@ type PPS struct {
 	SecondChromaQpIndexOffset         int
 }
 
-func NewPPS(sps *SPS, rbsp []byte) PPS {
+func NewPPS(sps *SPS, rbsp []byte) *PPS {
 	logger.Printf("== PPS RBSP %d bytes %d bits == \n", len(rbsp), len(rbsp)*8)
 	logger.Printf("\t%#v\n", rbsp[0:8])
 	pps := PPS{}
-	b := &BitReader{}
-
-	nextField := func(name string, bits int) int {
-		buf := make([]int, bits)
-		_, err := b.Read(rbsp, buf)
-		if err != nil {
-			fmt.Printf("error reading bits for %s: %v\n", name, err)
-			return -1
-		}
-
-		return bitVal(buf)
-	}
+	b := &BitReader{bytes: rbsp}
 	flagField := func() bool {
-		if v := nextField("", 1); v == 1 {
+		if v := b.NextField("", 1); v == 1 {
 			return true
 		}
 		return false
 	}
 
-	pps.ID = ue(b.golomb(rbsp))
-	pps.SPSID = ue(b.golomb(rbsp))
-	pps.EntropyCodingMode = nextField("EntropyCodingModeFlag", 1)
+	pps.ID = ue(b.golomb())
+	pps.SPSID = ue(b.golomb())
+	pps.EntropyCodingMode = b.NextField("EntropyCodingModeFlag", 1)
 	pps.BottomFieldPicOrderInFramePresent = flagField()
-	pps.NumSliceGroupsMinus1 = ue(b.golomb(rbsp))
+	pps.NumSliceGroupsMinus1 = ue(b.golomb())
 	if pps.NumSliceGroupsMinus1 > 0 {
-		pps.SliceGroupMapType = ue(b.golomb(rbsp))
+		pps.SliceGroupMapType = ue(b.golomb())
 		if pps.SliceGroupMapType == 0 {
 			for iGroup := 0; iGroup <= pps.NumSliceGroupsMinus1; iGroup++ {
-				pps.RunLengthMinus1[iGroup] = ue(b.golomb(rbsp))
+				pps.RunLengthMinus1[iGroup] = ue(b.golomb())
 			}
 		} else if pps.SliceGroupMapType == 2 {
 			for iGroup := 0; iGroup < pps.NumSliceGroupsMinus1; iGroup++ {
-				pps.TopLeft[iGroup] = ue(b.golomb(rbsp))
-				pps.BottomRight[iGroup] = ue(b.golomb(rbsp))
+				pps.TopLeft[iGroup] = ue(b.golomb())
+				pps.BottomRight[iGroup] = ue(b.golomb())
 			}
 		} else if pps.SliceGroupMapType > 2 && pps.SliceGroupMapType < 6 {
 			pps.SliceGroupChangeDirection = flagField()
-			pps.SliceGroupChangeRateMinus1 = ue(b.golomb(rbsp))
+			pps.SliceGroupChangeRateMinus1 = ue(b.golomb())
 		} else if pps.SliceGroupMapType == 6 {
-			pps.PicSizeInMapUnitsMinus1 = ue(b.golomb(rbsp))
+			pps.PicSizeInMapUnitsMinus1 = ue(b.golomb())
 			for i := 0; i <= pps.PicSizeInMapUnitsMinus1; i++ {
-				pps.SliceGroupId[i] = nextField(
+				pps.SliceGroupId[i] = b.NextField(
 					fmt.Sprintf("SliceGroupId[%d]", i),
 					int(math.Ceil(math.Log2(float64(pps.NumSliceGroupsMinus1+1)))))
 			}
 		}
 
 	}
-	pps.NumRefIdxL0DefaultActiveMinus1 = ue(b.golomb(rbsp))
-	pps.NumRefIdxL1DefaultActiveMinus1 = ue(b.golomb(rbsp))
+	pps.NumRefIdxL0DefaultActiveMinus1 = ue(b.golomb())
+	pps.NumRefIdxL1DefaultActiveMinus1 = ue(b.golomb())
 	pps.WeightedPred = flagField()
-	pps.WeightedBipred = nextField("WeightedBipredIDC", 2)
-	pps.PicInitQpMinus26 = se(b.golomb(rbsp))
-	pps.PicInitQsMinus26 = se(b.golomb(rbsp))
-	pps.ChromaQpIndexOffset = se(b.golomb(rbsp))
+	pps.WeightedBipred = b.NextField("WeightedBipredIDC", 2)
+	pps.PicInitQpMinus26 = se(b.golomb())
+	pps.PicInitQsMinus26 = se(b.golomb())
+	pps.ChromaQpIndexOffset = se(b.golomb())
 	pps.DeblockingFilterControlPresent = flagField()
 	pps.ConstrainedIntraPred = flagField()
 	pps.RedundantPicCntPresent = flagField()
 
 	logger.Printf("\tChecking for more PPS data")
-	if b.HasMoreData(rbsp) {
+	if b.HasMoreData() {
 		logger.Printf("\tProcessing additional PPS data")
-		pps.Transform8x8Mode = nextField("Transform8x8ModeFlag", 1)
+		pps.Transform8x8Mode = b.NextField("Transform8x8ModeFlag", 1)
 		pps.PicScalingMatrixPresent = flagField()
 		if pps.PicScalingMatrixPresent {
 			v := 6
@@ -115,14 +104,14 @@ func NewPPS(sps *SPS, rbsp []byte) PPS {
 				if pps.PicScalingListPresent[i] {
 					if i < 6 {
 						scalingList(
-							b, rbsp,
+							b,
 							ScalingList4x4[i],
 							16,
 							DefaultScalingMatrix4x4[i])
 
 					} else {
 						scalingList(
-							b, rbsp,
+							b,
 							ScalingList8x8[i],
 							64,
 							DefaultScalingMatrix8x8[i-6])
@@ -130,13 +119,13 @@ func NewPPS(sps *SPS, rbsp []byte) PPS {
 					}
 				}
 			}
-			pps.SecondChromaQpIndexOffset = se(b.golomb(rbsp))
+			pps.SecondChromaQpIndexOffset = se(b.golomb())
 		}
-		b.MoreRBSPData(rbsp)
+		b.MoreRBSPData()
 		// rbspTrailingBits()
 	}
 
 	debugPacket("PPS", pps)
-	return pps
+	return &pps
 
 }

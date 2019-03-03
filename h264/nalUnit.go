@@ -1,115 +1,110 @@
 package h264
 
+import "fmt"
+
 type NalUnit struct {
-	NumBytesInNalUnit            int
-	NumBytesInRBSP               int
-	ForbiddenZeroBit             int
-	RefIdc                       int
-	Type                         int
-	SvcExtensionFlag             int
-	Avc3dExtensionFlag           int
-	IdrFlag                      int
-	PriorityId                   int
-	NoInterLayerPredFlag         int
-	DependencyId                 int
-	QualityId                    int
-	TemporalId                   int
-	UseRefBasePicFlag            int
-	DiscardableFlag              int
-	OutputFlag                   int
-	ReservedThree2Bits           int
-	HeaderBytes                  int
-	NonIdrFlag                   int
-	ViewId                       int
-	AnchorPicFlag                int
-	InterViewFlag                int
-	ReservedOneBit               int
-	ViewIdx                      int
-	DepthFlag                    int
-	RBSPBytes                    []byte
-	EmulationPreventionThreeByte int
+	NumBytes             int
+	ForbiddenZeroBit     int
+	RefIdc               int
+	Type                 int
+	SvcExtensionFlag     int
+	Avc3dExtensionFlag   int
+	IdrFlag              int
+	PriorityId           int
+	NoInterLayerPredFlag int
+	DependencyId         int
+	QualityId            int
+	TemporalId           int
+	UseRefBasePicFlag    int
+	DiscardableFlag      int
+	OutputFlag           int
+	ReservedThree2Bits   int
+	HeaderBytes          int
+	NonIdrFlag           int
+	ViewId               int
+	AnchorPicFlag        int
+	InterViewFlag        int
+	ReservedOneBit       int
+	ViewIdx              int
+	DepthFlag            int
+	rbsp                 []byte
 }
 
-func NalUnitHeaderSvcExtension(nalUnit *NalUnit, r *RBSPReader) {
+func NalUnitHeaderSvcExtension(nalUnit *NalUnit, b *BitReader) {
 	// TODO: Annex G
-	nalUnit.IdrFlag = r.GetFieldValue("IdrFlag", 1)
-	nalUnit.PriorityId = r.GetFieldValue("PriorityId", 6)
-	nalUnit.NoInterLayerPredFlag = r.GetFieldValue("NoInterLayerPredFlag", 1)
-	nalUnit.DependencyId = r.GetFieldValue("DependencyId", 3)
-	nalUnit.QualityId = r.GetFieldValue("QualityId", 4)
-	nalUnit.TemporalId = r.GetFieldValue("TemporalId", 3)
-	nalUnit.UseRefBasePicFlag = r.GetFieldValue("UseRefBasePicFlag", 1)
-	nalUnit.DiscardableFlag = r.GetFieldValue("DiscardableFlag", 1)
-	nalUnit.OutputFlag = r.GetFieldValue("OutputFlag", 1)
-	nalUnit.ReservedThree2Bits = r.GetFieldValue("ReservedThree2Bits", 2)
+	nalUnit.IdrFlag = b.NextField("IdrFlag", 1)
+	nalUnit.PriorityId = b.NextField("PriorityId", 6)
+	nalUnit.NoInterLayerPredFlag = b.NextField("NoInterLayerPredFlag", 1)
+	nalUnit.DependencyId = b.NextField("DependencyId", 3)
+	nalUnit.QualityId = b.NextField("QualityId", 4)
+	nalUnit.TemporalId = b.NextField("TemporalId", 3)
+	nalUnit.UseRefBasePicFlag = b.NextField("UseRefBasePicFlag", 1)
+	nalUnit.DiscardableFlag = b.NextField("DiscardableFlag", 1)
+	nalUnit.OutputFlag = b.NextField("OutputFlag", 1)
+	nalUnit.ReservedThree2Bits = b.NextField("ReservedThree2Bits", 2)
 }
 
-func NalUnitHeader3davcExtension(nalUnit *NalUnit, r *RBSPReader) {
+func NalUnitHeader3davcExtension(nalUnit *NalUnit, b *BitReader) {
 	// TODO: Annex J
-	nalUnit.ViewIdx = r.GetFieldValue("ViewIdx", 8)
-	nalUnit.DepthFlag = r.GetFieldValue("DepthFlag", 1)
-	nalUnit.NonIdrFlag = r.GetFieldValue("NonIdrFlag", 1)
-	nalUnit.TemporalId = r.GetFieldValue("TemporalId", 3)
-	nalUnit.AnchorPicFlag = r.GetFieldValue("AnchorPicFlag", 1)
-	nalUnit.InterViewFlag = r.GetFieldValue("InterViewFlag", 1)
+	nalUnit.ViewIdx = b.NextField("ViewIdx", 8)
+	nalUnit.DepthFlag = b.NextField("DepthFlag", 1)
+	nalUnit.NonIdrFlag = b.NextField("NonIdrFlag", 1)
+	nalUnit.TemporalId = b.NextField("TemporalId", 3)
+	nalUnit.AnchorPicFlag = b.NextField("AnchorPicFlag", 1)
+	nalUnit.InterViewFlag = b.NextField("InterViewFlag", 1)
 }
-func NalUnitHeaderMvcExtension(nalUnit *NalUnit, r *RBSPReader) {
+func NalUnitHeaderMvcExtension(nalUnit *NalUnit, b *BitReader) {
 	// TODO: Annex H
-	nalUnit.NonIdrFlag = r.GetFieldValue("NonIdrFlag", 1)
-	nalUnit.PriorityId = r.GetFieldValue("PriorityId", 6)
-	nalUnit.ViewId = r.GetFieldValue("ViewId", 10)
-	nalUnit.TemporalId = r.GetFieldValue("TemporalId", 3)
-	nalUnit.AnchorPicFlag = r.GetFieldValue("AnchorPicFlag", 1)
-	nalUnit.InterViewFlag = r.GetFieldValue("InterViewFlag", 1)
-	nalUnit.ReservedOneBit = r.GetFieldValue("ReservedOneBit", 1)
+	nalUnit.NonIdrFlag = b.NextField("NonIdrFlag", 1)
+	nalUnit.PriorityId = b.NextField("PriorityId", 6)
+	nalUnit.ViewId = b.NextField("ViewId", 10)
+	nalUnit.TemporalId = b.NextField("TemporalId", 3)
+	nalUnit.AnchorPicFlag = b.NextField("AnchorPicFlag", 1)
+	nalUnit.InterViewFlag = b.NextField("InterViewFlag", 1)
+	nalUnit.ReservedOneBit = b.NextField("ReservedOneBit", 1)
 }
 
-func NewNalUnit(r *RBSPReader, numBytesInNalUnit int) *NalUnit {
-	logger.Printf("debug: reading %d byte NALU\n", numBytesInNalUnit)
+func NewNalUnit(frame []byte) *NalUnit {
+	fmt.Printf("== NalUnit %d\n", len(frame))
+	fmt.Printf(" == %#v\n", frame[0:8])
 	nalUnit := NalUnit{
-		NumBytesInNalUnit: numBytesInNalUnit,
-		NumBytesInRBSP:    0,
-		HeaderBytes:       1,
+		NumBytes:    len(frame),
+		HeaderBytes: 1,
 	}
-	nalUnit.ForbiddenZeroBit = r.GetFieldValue("ForbiddenZeroBit", 1)
-	nalUnit.RefIdc = r.GetFieldValue("NalRefIdc", 2)
-	nalUnit.Type = r.GetFieldValue("NalUnitType", 5)
+	b := &BitReader{bytes: frame}
+	nalUnit.ForbiddenZeroBit = b.NextField("ForbiddenZeroBit", 1)
+	nalUnit.RefIdc = b.NextField("NalRefIdc", 2)
+	nalUnit.Type = b.NextField("NalUnitType", 5)
 
-	logger.Printf("info: NAL Unit %d type %s: %d bytes\n", nalUnit.Type, NALUnitType[nalUnit.Type], numBytesInNalUnit)
 	if nalUnit.Type == 14 || nalUnit.Type == 20 || nalUnit.Type == 21 {
 		if nalUnit.Type != 21 {
-			nalUnit.SvcExtensionFlag = r.GetFieldValue("SvcExtensionFlag", 1)
+			nalUnit.SvcExtensionFlag = b.NextField("SvcExtensionFlag", 1)
 		} else {
-			nalUnit.Avc3dExtensionFlag = r.GetFieldValue("Avc3dExtensionFlag", 1)
+			nalUnit.Avc3dExtensionFlag = b.NextField("Avc3dExtensionFlag", 1)
 		}
 		if nalUnit.SvcExtensionFlag == 1 {
-			NalUnitHeaderSvcExtension(&nalUnit, r)
+			NalUnitHeaderSvcExtension(&nalUnit, b)
 			nalUnit.HeaderBytes += 3
 		} else if nalUnit.Avc3dExtensionFlag == 1 {
-			NalUnitHeader3davcExtension(&nalUnit, r)
+			NalUnitHeader3davcExtension(&nalUnit, b)
 			nalUnit.HeaderBytes += 2
 		} else {
-			NalUnitHeaderMvcExtension(&nalUnit, r)
+			NalUnitHeaderMvcExtension(&nalUnit, b)
 			nalUnit.HeaderBytes += 3
 
 		}
 	}
-	logger.Printf("debug: finding end with %d headerbytes and %d NumBytesInRBSP\n",
-		nalUnit.HeaderBytes,
-		nalUnit.NumBytesInRBSP)
-	for i := nalUnit.HeaderBytes; i < numBytesInNalUnit; i++ {
-		if i+2 < nalUnit.NumBytesInRBSP && r.NextBitsValue(24) == 3 {
-			nalUnit.NumBytesInRBSP += 1
-			nalUnit.RBSPBytes = append(nalUnit.RBSPBytes, byte(nalUnit.NumBytesInRBSP))
-			nalUnit.NumBytesInRBSP += 1
-			nalUnit.RBSPBytes = append(nalUnit.RBSPBytes, byte(nalUnit.NumBytesInRBSP))
-			i += 2
-			nalUnit.EmulationPreventionThreeByte = r.GetFieldValue("EmulationPreventionThreeByte", 8)
-		} else {
-			nalUnit.NumBytesInRBSP += 1
-			nalUnit.RBSPBytes = append(nalUnit.RBSPBytes, byte(nalUnit.NumBytesInRBSP))
+
+	for i := nalUnit.HeaderBytes; i < nalUnit.NumBytes; i++ {
+		var nextBitsIs3 bool
+		if frame[i] == byte(0) && frame[i+1] == byte(0) && frame[1+2] == byte(3) {
+			nextBitsIs3 = true
+		}
+		if i+2 < nalUnit.NumBytes && nextBitsIs3 {
 		}
 	}
 
+	nalUnit.rbsp = frame[nalUnit.HeaderBytes:]
+	logger.Printf("info: decoded %s NAL\n", NALUnitType[nalUnit.Type])
 	return &nalUnit
 }

@@ -259,7 +259,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 
 					logger.Printf("TODO: ae for PevIntra4x4PredModeFlag[%d]\n", luma4x4BlkIdx)
 				} else {
-					v = NextField(fmt.Sprintf("PrevIntra4x4PredModeFlag[%d]", luma4x4BlkIdx), 1, b, rbsp)
+					v = b.NextField(fmt.Sprintf("PrevIntra4x4PredModeFlag[%d]", luma4x4BlkIdx), 1)
 				}
 				sliceContext.Slice.Data.PrevIntra4x4PredModeFlag = append(
 					sliceContext.Slice.Data.PrevIntra4x4PredModeFlag,
@@ -274,7 +274,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 
 						logger.Printf("TODO: ae for RemIntra4x4PredMode[%d]\n", luma4x4BlkIdx)
 					} else {
-						v = NextField(fmt.Sprintf("RemIntra4x4PredMode[%d]", luma4x4BlkIdx), 3, b, rbsp)
+						v = b.NextField(fmt.Sprintf("RemIntra4x4PredMode[%d]", luma4x4BlkIdx), 3)
 					}
 					if len(sliceContext.Slice.Data.RemIntra4x4PredMode) < luma4x4BlkIdx {
 						sliceContext.Slice.Data.RemIntra4x4PredMode = append(
@@ -296,7 +296,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 
 					logger.Printf("TODO: ae for PrevIntra8x8PredModeFlag[%d]\n", luma8x8BlkIdx)
 				} else {
-					v = NextField(fmt.Sprintf("PrevIntra8x8PredModeFlag[%d]", luma8x8BlkIdx), 1, b, rbsp)
+					v = b.NextField(fmt.Sprintf("PrevIntra8x8PredModeFlag[%d]", luma8x8BlkIdx), 1)
 				}
 				sliceContext.Slice.Data.PrevIntra8x8PredModeFlag = append(
 					sliceContext.Slice.Data.PrevIntra8x8PredModeFlag, v)
@@ -310,7 +310,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 
 						logger.Printf("TODO: ae for RemIntra8x8PredMode[%d]\n", luma8x8BlkIdx)
 					} else {
-						v = NextField(fmt.Sprintf("RemIntra8x8PredMode[%d]", luma8x8BlkIdx), 3, b, rbsp)
+						v = b.NextField(fmt.Sprintf("RemIntra8x8PredMode[%d]", luma8x8BlkIdx), 3)
 					}
 					if len(sliceContext.Slice.Data.RemIntra8x8PredMode) < luma8x8BlkIdx {
 						sliceContext.Slice.Data.RemIntra8x8PredMode = append(
@@ -332,7 +332,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 
 				logger.Printf("TODO: ae for IntraChromaPredMode\n")
 			} else {
-				sliceContext.Slice.Data.IntraChromaPredMode = ue(b.golomb(rbsp))
+				sliceContext.Slice.Data.IntraChromaPredMode = ue(b.golomb())
 			}
 		}
 
@@ -358,12 +358,12 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 					// then the value should be 0
 					if MbaffFrameFlag(sliceContext.SPS, sliceContext.Slice.Header) == 0 || !sliceContext.Slice.Data.MbFieldDecodingFlag {
 						sliceContext.Slice.Data.RefIdxL0[mbPartIdx] = te(
-							b.golomb(rbsp),
+							b.golomb(),
 							sliceContext.Slice.Header.NumRefIdxL0ActiveMinus1)
 					} else {
 						rangeMax := 2*sliceContext.Slice.Header.NumRefIdxL0ActiveMinus1 + 1
 						sliceContext.Slice.Data.RefIdxL0[mbPartIdx] = te(
-							b.golomb(rbsp),
+							b.golomb(),
 							rangeMax)
 					}
 				}
@@ -399,7 +399,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 						}
 						logger.Printf("TODO: ae for MvdL0[%d][0][%d]\n", mbPartIdx, compIdx)
 					} else {
-						sliceContext.Slice.Data.MvdL0[mbPartIdx][0][compIdx] = se(b.golomb(rbsp))
+						sliceContext.Slice.Data.MvdL0[mbPartIdx][0][compIdx] = se(b.golomb())
 					}
 				}
 			}
@@ -435,7 +435,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 						// TODO: se(v) or ae(v)
 						logger.Printf("TODO: ae for MvdL1[%d][0][%d]\n", mbPartIdx, compIdx)
 					} else {
-						sliceContext.Slice.Data.MvdL1[mbPartIdx][0][compIdx] = se(b.golomb(rbsp))
+						sliceContext.Slice.Data.MvdL1[mbPartIdx][0][compIdx] = se(b.golomb())
 					}
 				}
 			}
@@ -558,33 +558,12 @@ func MbaffFrameFlag(sps *SPS, header *SliceHeader) int {
 	return 0
 }
 
-func NextField(name string, bits int, b *BitReader, rbsp []byte) int {
-	logger.Printf("\t[%s] %d bits\n", name, bits)
-	buf := make([]int, bits)
-	if _, err := b.Read(rbsp, buf); err != nil {
-		logger.Printf("error reading %d bits for %s: %v\n", bits, name, err)
-		return -1
-	}
-	return bitVal(buf)
-}
-
-func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceData {
+func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 	logger.Printf("== SliceData starts at ByteOffset: %d BitOffset %d\n", b.byteOffset, b.bitOffset)
-	logger.Printf("\t== %d bytes remain ==\n", len(rbsp)-b.byteOffset)
+	logger.Printf("\t== %d bytes remain ==\n", len(b.bytes)-b.byteOffset)
 	sliceContext.Slice.Data = &SliceData{}
-	nextField := func(name string, bits int) int {
-		logger.Printf("\tget %d bits for %s\n", bits, name)
-		buf := make([]int, bits)
-		_, err := b.Read(rbsp, buf)
-		if err != nil {
-			logger.Printf("error reading bits for %s: %v\n", name, err)
-			return -1
-		}
-
-		return bitVal(buf)
-	}
 	flagField := func() bool {
-		if v := nextField("", 1); v == 1 {
+		if v := b.NextField("", 1); v == 1 {
 			return true
 		}
 		return false
@@ -592,7 +571,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 	initCabac(sliceContext.PPS, sliceContext.Slice.Header, sliceContext.Slice.Data)
 	if sliceContext.PPS.EntropyCodingMode == 1 {
 		for !b.IsByteAligned() {
-			sliceContext.Slice.Data.CabacAlignmentOneBit = nextField("CabacAlignmentOneBit", 1)
+			sliceContext.Slice.Data.CabacAlignmentOneBit = b.NextField("CabacAlignmentOneBit", 1)
 		}
 	}
 	mbaffFrameFlag := 0
@@ -611,7 +590,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 		if sliceContext.Slice.Data.SliceTypeName != "I" && sliceContext.Slice.Data.SliceTypeName != "SI" {
 			logger.Printf("\tNonI/SI slice, processing moreData\n")
 			if sliceContext.PPS.EntropyCodingMode == 0 {
-				sliceContext.Slice.Data.MbSkipRun = ue(b.golomb(rbsp))
+				sliceContext.Slice.Data.MbSkipRun = ue(b.golomb())
 				if sliceContext.Slice.Data.MbSkipRun > 0 {
 					prevMbSkipped = 1
 				}
@@ -620,13 +599,13 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 					currMbAddr = nextMbAddress(currMbAddr, sliceContext.SPS, sliceContext.PPS, sliceContext.Slice.Header)
 				}
 				if sliceContext.Slice.Data.MbSkipRun > 0 {
-					logger.Printf("\tNon-I/SI: Checking for more sliceContext.Slice.Data %d:%d:%d\n", b.byteOffset, b.bitOffset, len(rbsp))
-					moreDataFlag = b.MoreRBSPData(rbsp)
+					logger.Printf("\tNon-I/SI: Checking for more sliceContext.Slice.Data %d:%d:%d\n", b.byteOffset, b.bitOffset, len(b.Bytes()))
+					moreDataFlag = b.MoreRBSPData()
 				}
 			} else {
 				sliceContext.Slice.Data.MbSkipFlag = flagField()
 
-				logger.Printf("\tNon-I/SI: Eval MbSkipFlag[%v] %d:%d:%d\n", sliceContext.Slice.Data.MbSkipFlag, b.byteOffset, b.bitOffset, len(rbsp))
+				logger.Printf("\tNon-I/SI: Eval MbSkipFlag[%v] %d:%d:%d\n", sliceContext.Slice.Data.MbSkipFlag, b.byteOffset, b.bitOffset, len(b.Bytes()))
 				moreDataFlag = !sliceContext.Slice.Data.MbSkipFlag
 			}
 		}
@@ -635,7 +614,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 				if sliceContext.PPS.EntropyCodingMode == 1 {
 					// TODO: ae implementation
 					binarization := NewBinarization("MbFieldDecodingFlag", sliceContext.Slice.Data)
-					binarization.Decode(sliceContext, b, rbsp)
+					binarization.Decode(sliceContext, b, b.Bytes())
 
 					logger.Printf("TODO: ae for MbFieldDecodingFlag\n")
 				} else {
@@ -647,22 +626,22 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 			if sliceContext.PPS.EntropyCodingMode == 1 {
 				// TODO: ae implementation
 				binarization := NewBinarization("MbType", sliceContext.Slice.Data)
-				binarization.Decode(sliceContext, b, rbsp)
+				binarization.Decode(sliceContext, b, b.Bytes())
 
 				logger.Printf("TODO: ae for MBType\n")
 			} else {
-				sliceContext.Slice.Data.MbType = ue(b.golomb(rbsp))
+				sliceContext.Slice.Data.MbType = ue(b.golomb())
 			}
 			if sliceContext.Slice.Data.MbTypeName == "I_PCM" {
 				for !b.IsByteAligned() {
-					_ = nextField("PCMAlignmentZeroBit", 1)
+					_ = b.NextField("PCMAlignmentZeroBit", 1)
 				}
 				// 7-3 p95
 				bitDepthY := 8 + sliceContext.SPS.BitDepthLumaMinus8
 				for i := 0; i < 256; i++ {
 					sliceContext.Slice.Data.PcmSampleLuma = append(
 						sliceContext.Slice.Data.PcmSampleLuma,
-						nextField(fmt.Sprintf("PcmSampleLuma[%d]", i), bitDepthY))
+						b.NextField(fmt.Sprintf("PcmSampleLuma[%d]", i), bitDepthY))
 				}
 				// 9.3.1 p 246
 				initCabac(sliceContext.PPS, sliceContext.Slice.Header, sliceContext.Slice.Data)
@@ -679,7 +658,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 				for i := 0; i < 2*mbWidthC*mbHeightC; i++ {
 					sliceContext.Slice.Data.PcmSampleChroma = append(
 						sliceContext.Slice.Data.PcmSampleChroma,
-						nextField(fmt.Sprintf("PcmSampleChroma[%d]", i), bitDepthC))
+						b.NextField(fmt.Sprintf("PcmSampleChroma[%d]", i), bitDepthC))
 				}
 				// 9.3.1 p 246
 				initCabac(sliceContext.PPS, sliceContext.Slice.Header, sliceContext.Slice.Data)
@@ -707,26 +686,26 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 						// If sliceContext.PPS.EntropyCodingMode == 1, use ae(v)
 						if sliceContext.PPS.EntropyCodingMode == 1 {
 							binarization := NewBinarization("TransformSize8x8Flag", sliceContext.Slice.Data)
-							binarization.Decode(sliceContext, b, rbsp)
+							binarization.Decode(sliceContext, b, b.Bytes())
 
 							logger.Println("TODO: ae(v) for TransformSize8x8Flag")
 						} else {
 							sliceContext.Slice.Data.TransformSize8x8Flag = flagField()
 						}
 					}
-					MbPred(sliceContext, b, rbsp)
+					MbPred(sliceContext, b, b.Bytes())
 				}
 				if MbPartPredMode(sliceContext.Slice.Data, sliceContext.Slice.Data.SliceTypeName, sliceContext.Slice.Data.MbType, 0) != "Intra_16x16" {
 					// TODO: me, ae
 					logger.Printf("TODO: CodedBlockPattern pending me/ae implementation\n")
 					if sliceContext.PPS.EntropyCodingMode == 1 {
 						binarization := NewBinarization("CodedBlockPattern", sliceContext.Slice.Data)
-						binarization.Decode(sliceContext, b, rbsp)
+						binarization.Decode(sliceContext, b, b.Bytes())
 
 						logger.Printf("TODO: ae for CodedBlockPattern\n")
 					} else {
 						sliceContext.Slice.Data.CodedBlockPattern = me(
-							b.golomb(rbsp),
+							b.golomb(),
 							sliceContext.Slice.Header.ChromaArrayType,
 							MbPartPredMode(sliceContext.Slice.Data, sliceContext.Slice.Data.SliceTypeName, sliceContext.Slice.Data.MbType, 0))
 					}
@@ -736,7 +715,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 						// TODO: 1 bit or ae(v)
 						if sliceContext.PPS.EntropyCodingMode == 1 {
 							binarization := NewBinarization("Transform8x8Flag", sliceContext.Slice.Data)
-							binarization.Decode(sliceContext, b, rbsp)
+							binarization.Decode(sliceContext, b, b.Bytes())
 
 							logger.Printf("TODO: ae for TranformSize8x8Flag\n")
 						} else {
@@ -748,11 +727,11 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 					// TODO: se or ae(v)
 					if sliceContext.PPS.EntropyCodingMode == 1 {
 						binarization := NewBinarization("MbQpDelta", sliceContext.Slice.Data)
-						binarization.Decode(sliceContext, b, rbsp)
+						binarization.Decode(sliceContext, b, b.Bytes())
 
 						logger.Printf("TODO: ae for MbQpDelta\n")
 					} else {
-						sliceContext.Slice.Data.MbQpDelta = se(b.golomb(rbsp))
+						sliceContext.Slice.Data.MbQpDelta = se(b.golomb())
 					}
 
 				}
@@ -760,8 +739,8 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 
 		} // END MacroblockLayer
 		if sliceContext.PPS.EntropyCodingMode == 0 {
-			logger.Printf("\tNon-I/SI: Again Checking for more sliceContext.Slice.Data %d:%d:%d\n", b.byteOffset, b.bitOffset, len(rbsp))
-			moreDataFlag = b.MoreRBSPData(rbsp)
+			logger.Printf("\tNon-I/SI: Again Checking for more sliceContext.Slice.Data %d:%d:%d\n", b.byteOffset, b.bitOffset, len(b.Bytes()))
+			moreDataFlag = b.MoreRBSPData()
 		} else {
 			if sliceContext.Slice.Data.SliceTypeName != "I" && sliceContext.Slice.Data.SliceTypeName != "SI" {
 				if sliceContext.Slice.Data.MbSkipFlag {
@@ -771,12 +750,12 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader, rbsp []byte) *SliceD
 				}
 			}
 			if mbaffFrameFlag == 1 && currMbAddr%2 == 0 {
-				logger.Printf("\tNon-I/SI: More sliceContext.Slice.Data at currMbAddr[%v] sliceContext.Slice.Data %d:%d:%d\n", currMbAddr, b.byteOffset, b.bitOffset, len(rbsp))
+				logger.Printf("\tNon-I/SI: More sliceContext.Slice.Data at currMbAddr[%v] sliceContext.Slice.Data %d:%d:%d\n", currMbAddr, b.byteOffset, b.bitOffset, len(b.Bytes()))
 				moreDataFlag = true
 			} else {
 				// TODO: ae implementation
-				sliceContext.Slice.Data.EndOfSliceFlag = flagField() // ae(b.golomb(rbsp))
-				logger.Printf("\tNon-I/SI: End of slice[%v] %d:%d:%d\n", sliceContext.Slice.Data.EndOfSliceFlag, b.byteOffset, b.bitOffset, len(rbsp))
+				sliceContext.Slice.Data.EndOfSliceFlag = flagField() // ae(b.golomb())
+				logger.Printf("\tNon-I/SI: End of slice[%v] %d:%d:%d\n", sliceContext.Slice.Data.EndOfSliceFlag, b.byteOffset, b.bitOffset, len(b.Bytes()))
 				moreDataFlag = !sliceContext.Slice.Data.EndOfSliceFlag
 			}
 		}
@@ -802,34 +781,23 @@ func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceCo
 	} else {
 		header.ChromaArrayType = sps.ChromaFormat
 	}
-	b := &BitReader{}
-	nextField := func(name string, bits int) int {
-		logger.Printf("\tget %d bits for %s\n", bits, name)
-		buf := make([]int, bits)
-		_, err := b.Read(rbsp, buf)
-		if err != nil {
-			logger.Printf("error reading bits for %s: %v\n", name, err)
-			return -1
-		}
-
-		return bitVal(buf)
-	}
+	b := &BitReader{bytes: rbsp}
 	flagField := func() bool {
-		if v := nextField("", 1); v == 1 {
+		if v := b.NextField("", 1); v == 1 {
 			return true
 		}
 		return false
 	}
-	header.FirstMbInSlice = ue(b.golomb(rbsp))
-	header.SliceType = ue(b.golomb(rbsp))
+	header.FirstMbInSlice = ue(b.golomb())
+	header.SliceType = ue(b.golomb())
 	sliceType := sliceTypeMap[header.SliceType]
 	logger.Printf("== %s (%s) slice of %d bytes\n", NALUnitType[nalUnit.Type], sliceType, len(rbsp))
-	header.PPSID = ue(b.golomb(rbsp))
+	header.PPSID = ue(b.golomb())
 	if sps.UseSeparateColorPlane {
-		header.ColorPlaneID = nextField("ColorPlaneID", 2)
+		header.ColorPlaneID = b.NextField("ColorPlaneID", 2)
 	}
 	// TODO: See 7.4.3
-	// header.FrameNum = nextField("FrameNum", 0)
+	// header.FrameNum = b.NextField("FrameNum", 0)
 	if !sps.FrameMbsOnly {
 		header.FieldPic = flagField()
 		if header.FieldPic {
@@ -837,22 +805,22 @@ func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceCo
 		}
 	}
 	if idrPic {
-		header.IDRPicID = ue(b.golomb(rbsp))
+		header.IDRPicID = ue(b.golomb())
 	}
 	if sps.PicOrderCountType == 0 {
-		header.PicOrderCntLsb = nextField("PicOrderCntLsb", sps.Log2MaxPicOrderCntLSBMin4+4)
+		header.PicOrderCntLsb = b.NextField("PicOrderCntLsb", sps.Log2MaxPicOrderCntLSBMin4+4)
 		if pps.BottomFieldPicOrderInFramePresent && !header.FieldPic {
-			header.DeltaPicOrderCntBottom = se(b.golomb(rbsp))
+			header.DeltaPicOrderCntBottom = se(b.golomb())
 		}
 	}
 	if sps.PicOrderCountType == 1 && !sps.DeltaPicOrderAlwaysZero {
-		header.DeltaPicOrderCnt[0] = se(b.golomb(rbsp))
+		header.DeltaPicOrderCnt[0] = se(b.golomb())
 		if pps.BottomFieldPicOrderInFramePresent && !header.FieldPic {
-			header.DeltaPicOrderCnt[1] = se(b.golomb(rbsp))
+			header.DeltaPicOrderCnt[1] = se(b.golomb())
 		}
 	}
 	if pps.RedundantPicCntPresent {
-		header.RedundantPicCnt = ue(b.golomb(rbsp))
+		header.RedundantPicCnt = ue(b.golomb())
 	}
 	if sliceType == "B" {
 		header.DirectSpatialMvPred = flagField()
@@ -860,9 +828,9 @@ func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceCo
 	if sliceType == "B" || sliceType == "SP" || sliceType == "B" {
 		header.NumRefIdxActiveOverride = flagField()
 		if header.NumRefIdxActiveOverride {
-			header.NumRefIdxL0ActiveMinus1 = ue(b.golomb(rbsp))
+			header.NumRefIdxL0ActiveMinus1 = ue(b.golomb())
 			if sliceType == "B" {
-				header.NumRefIdxL1ActiveMinus1 = ue(b.golomb(rbsp))
+				header.NumRefIdxL1ActiveMinus1 = ue(b.golomb())
 			}
 		}
 	}
@@ -877,11 +845,11 @@ func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceCo
 			header.RefPicListModificationFlagL0 = flagField()
 			if header.RefPicListModificationFlagL0 {
 				for header.ModificationOfPicNums != 3 {
-					header.ModificationOfPicNums = ue(b.golomb(rbsp))
+					header.ModificationOfPicNums = ue(b.golomb())
 					if header.ModificationOfPicNums == 0 || header.ModificationOfPicNums == 1 {
-						header.AbsDiffPicNumMinus1 = ue(b.golomb(rbsp))
+						header.AbsDiffPicNumMinus1 = ue(b.golomb())
 					} else if header.ModificationOfPicNums == 2 {
-						header.LongTermPicNum = ue(b.golomb(rbsp))
+						header.LongTermPicNum = ue(b.golomb())
 					}
 				}
 			}
@@ -891,11 +859,11 @@ func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceCo
 			header.RefPicListModificationFlagL1 = flagField()
 			if header.RefPicListModificationFlagL1 {
 				for header.ModificationOfPicNums != 3 {
-					header.ModificationOfPicNums = ue(b.golomb(rbsp))
+					header.ModificationOfPicNums = ue(b.golomb())
 					if header.ModificationOfPicNums == 0 || header.ModificationOfPicNums == 1 {
-						header.AbsDiffPicNumMinus1 = ue(b.golomb(rbsp))
+						header.AbsDiffPicNumMinus1 = ue(b.golomb())
 					} else if header.ModificationOfPicNums == 2 {
-						header.LongTermPicNum = ue(b.golomb(rbsp))
+						header.LongTermPicNum = ue(b.golomb())
 					}
 				}
 			}
@@ -905,15 +873,15 @@ func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceCo
 
 	if (pps.WeightedPred && (sliceType == "P" || sliceType == "SP")) || (pps.WeightedBipred == 1 && sliceType == "B") {
 		// predWeightTable()
-		header.LumaLog2WeightDenom = ue(b.golomb(rbsp))
+		header.LumaLog2WeightDenom = ue(b.golomb())
 		if header.ChromaArrayType != 0 {
-			header.ChromaLog2WeightDenom = ue(b.golomb(rbsp))
+			header.ChromaLog2WeightDenom = ue(b.golomb())
 		}
 		for i := 0; i <= header.NumRefIdxL0ActiveMinus1; i++ {
 			header.LumaWeightL0Flag = flagField()
 			if header.LumaWeightL0Flag {
-				header.LumaWeightL0 = append(header.LumaWeightL0, se(b.golomb(rbsp)))
-				header.LumaOffsetL0 = append(header.LumaOffsetL0, se(b.golomb(rbsp)))
+				header.LumaWeightL0 = append(header.LumaWeightL0, se(b.golomb()))
+				header.LumaOffsetL0 = append(header.LumaOffsetL0, se(b.golomb()))
 			}
 			if header.ChromaArrayType != 0 {
 				header.ChromaWeightL0Flag = flagField()
@@ -921,8 +889,8 @@ func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceCo
 					header.ChromaWeightL0 = append(header.ChromaWeightL0, []int{})
 					header.ChromaOffsetL0 = append(header.ChromaOffsetL0, []int{})
 					for j := 0; j < 2; j++ {
-						header.ChromaWeightL0[i] = append(header.ChromaWeightL0[i], se(b.golomb(rbsp)))
-						header.ChromaOffsetL0[i] = append(header.ChromaOffsetL0[i], se(b.golomb(rbsp)))
+						header.ChromaWeightL0[i] = append(header.ChromaWeightL0[i], se(b.golomb()))
+						header.ChromaOffsetL0[i] = append(header.ChromaOffsetL0[i], se(b.golomb()))
 					}
 				}
 			}
@@ -931,8 +899,8 @@ func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceCo
 			for i := 0; i <= header.NumRefIdxL1ActiveMinus1; i++ {
 				header.LumaWeightL1Flag = flagField()
 				if header.LumaWeightL1Flag {
-					header.LumaWeightL1 = append(header.LumaWeightL1, se(b.golomb(rbsp)))
-					header.LumaOffsetL1 = append(header.LumaOffsetL1, se(b.golomb(rbsp)))
+					header.LumaWeightL1 = append(header.LumaWeightL1, se(b.golomb()))
+					header.LumaOffsetL1 = append(header.LumaOffsetL1, se(b.golomb()))
 				}
 				if header.ChromaArrayType != 0 {
 					header.ChromaWeightL1Flag = flagField()
@@ -940,8 +908,8 @@ func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceCo
 						header.ChromaWeightL1 = append(header.ChromaWeightL1, []int{})
 						header.ChromaOffsetL1 = append(header.ChromaOffsetL1, []int{})
 						for j := 0; j < 2; j++ {
-							header.ChromaWeightL1[i] = append(header.ChromaWeightL1[i], se(b.golomb(rbsp)))
-							header.ChromaOffsetL1[i] = append(header.ChromaOffsetL1[i], se(b.golomb(rbsp)))
+							header.ChromaWeightL1[i] = append(header.ChromaWeightL1[i], se(b.golomb()))
+							header.ChromaOffsetL1[i] = append(header.ChromaOffsetL1[i], se(b.golomb()))
 						}
 					}
 				}
@@ -956,43 +924,43 @@ func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceCo
 		} else {
 			header.AdaptiveRefPicMarkingModeFlag = flagField()
 			if header.AdaptiveRefPicMarkingModeFlag {
-				header.MemoryManagementControlOperation = ue(b.golomb(rbsp))
+				header.MemoryManagementControlOperation = ue(b.golomb())
 				for header.MemoryManagementControlOperation != 0 {
 					if header.MemoryManagementControlOperation == 1 || header.MemoryManagementControlOperation == 3 {
-						header.DifferenceOfPicNumsMinus1 = ue(b.golomb(rbsp))
+						header.DifferenceOfPicNumsMinus1 = ue(b.golomb())
 					}
 					if header.MemoryManagementControlOperation == 2 {
-						header.LongTermPicNum = ue(b.golomb(rbsp))
+						header.LongTermPicNum = ue(b.golomb())
 					}
 					if header.MemoryManagementControlOperation == 3 || header.MemoryManagementControlOperation == 6 {
-						header.LongTermFrameIdx = ue(b.golomb(rbsp))
+						header.LongTermFrameIdx = ue(b.golomb())
 					}
 					if header.MemoryManagementControlOperation == 4 {
-						header.MaxLongTermFrameIdxPlus1 = ue(b.golomb(rbsp))
+						header.MaxLongTermFrameIdxPlus1 = ue(b.golomb())
 					}
 				}
 			}
 		} // end decRefPicMarking
 	}
 	if pps.EntropyCodingMode == 1 && sliceType != "I" && sliceType != "SI" {
-		header.CabacInit = ue(b.golomb(rbsp))
+		header.CabacInit = ue(b.golomb())
 	}
-	header.SliceQpDelta = se(b.golomb(rbsp))
+	header.SliceQpDelta = se(b.golomb())
 	if sliceType == "SP" || sliceType == "SI" {
 		if sliceType == "SP" {
 			header.SpForSwitch = flagField()
 		}
-		header.SliceQsDelta = se(b.golomb(rbsp))
+		header.SliceQsDelta = se(b.golomb())
 	}
 	if pps.DeblockingFilterControlPresent {
-		header.DisableDeblockingFilter = ue(b.golomb(rbsp))
+		header.DisableDeblockingFilter = ue(b.golomb())
 		if header.DisableDeblockingFilter != 1 {
-			header.SliceAlphaC0OffsetDiv2 = se(b.golomb(rbsp))
-			header.SliceBetaOffsetDiv2 = se(b.golomb(rbsp))
+			header.SliceAlphaC0OffsetDiv2 = se(b.golomb())
+			header.SliceBetaOffsetDiv2 = se(b.golomb())
 		}
 	}
 	if pps.NumSliceGroupsMinus1 > 0 && pps.SliceGroupMapType >= 3 && pps.SliceGroupMapType <= 5 {
-		header.SliceGroupChangeCycle = nextField(
+		header.SliceGroupChangeCycle = b.NextField(
 			"SliceGroupChangeCycle",
 			int(math.Ceil(math.Log2(float64(pps.PicSizeInMapUnitsMinus1/pps.SliceGroupChangeRateMinus1+1)))))
 	}
@@ -1005,7 +973,7 @@ func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceCo
 			Header: &header,
 		},
 	}
-	sliceContext.Slice.Data = NewSliceData(sliceContext, b, rbsp)
+	sliceContext.Slice.Data = NewSliceData(sliceContext, b)
 	debugPacket("Header", sliceContext.Slice.Header)
 	debugPacket("Data", sliceContext.Slice.Data)
 	return sliceContext

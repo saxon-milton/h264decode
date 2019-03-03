@@ -166,15 +166,15 @@ func isInList(l []int, term int) bool {
 func debugPacket(name string, packet interface{}) {
 	logger.Printf("%s packet\n", name)
 	for _, line := range strings.Split(fmt.Sprintf("%+v", packet), " ") {
-		logger.Printf("\t%s\n", line)
+		logger.Printf("\t%#v\n", line)
 	}
 }
-func scalingList(b *BitReader, rbsp []byte, scalingList []int, sizeOfScalingList int, defaultScalingMatrix []int) {
+func scalingList(b *BitReader, scalingList []int, sizeOfScalingList int, defaultScalingMatrix []int) {
 	lastScale := 8
 	nextScale := 8
 	for i := 0; i < sizeOfScalingList; i++ {
 		if nextScale != 0 {
-			deltaScale := se(b.golomb(rbsp))
+			deltaScale := se(b.golomb())
 			nextScale = (lastScale + deltaScale + 256) % 256
 			if i == 0 && nextScale == 0 {
 				// Scaling list should use the default list for this point in the matrix
@@ -189,74 +189,63 @@ func scalingList(b *BitReader, rbsp []byte, scalingList []int, sizeOfScalingList
 		lastScale = scalingList[i]
 	}
 }
-func NewSPS(rbsp []byte) SPS {
+func NewSPS(rbsp []byte) *SPS {
 	logger.Printf(" == SPS RBSP %d bytes %d bits == \n", len(rbsp), len(rbsp)*8)
 	logger.Printf("\t== %#v\n", rbsp[0:8])
 	sps := SPS{}
-	b := &BitReader{}
-	// Byte 0
-	nextField := func(name string, bits int) int {
-		buf := make([]int, bits)
-		_, err := b.Read(rbsp, buf)
-		if err != nil {
-			logger.Printf("error reading bits for %s: %v\n", name, err)
-			return -1
-		}
-
-		return bitVal(buf)
-	}
+	b := &BitReader{bytes: rbsp}
 	hrdParameters := func() {
-		sps.CpbCntMinus1 = ue(b.golomb(rbsp))
-		sps.BitRateScale = nextField("BitRateScale", 4)
-		sps.CpbSizeScale = nextField("CPBSizeScale", 4)
+		sps.CpbCntMinus1 = ue(b.golomb())
+		sps.BitRateScale = b.NextField("BitRateScale", 4)
+		sps.CpbSizeScale = b.NextField("CPBSizeScale", 4)
 		// SchedSelIdx E1.2
 		for sseli := 0; sseli <= sps.CpbCntMinus1; sseli++ {
-			sps.BitRateValueMinus1 = append(sps.BitRateValueMinus1, ue(b.golomb(rbsp)))
-			sps.CpbSizeValueMinus1 = append(sps.CpbSizeValueMinus1, ue(b.golomb(rbsp)))
-			if v := nextField(fmt.Sprintf("CBR[%d]", sseli), 1); v == 1 {
+			sps.BitRateValueMinus1 = append(sps.BitRateValueMinus1, ue(b.golomb()))
+			sps.CpbSizeValueMinus1 = append(sps.CpbSizeValueMinus1, ue(b.golomb()))
+			if v := b.NextField(fmt.Sprintf("CBR[%d]", sseli), 1); v == 1 {
 				sps.Cbr = append(sps.Cbr, true)
 			} else {
 				sps.Cbr = append(sps.Cbr, false)
 			}
 
-			sps.InitialCpbRemovalDelayLengthMinus1 = nextField("InitialCpbRemovalDelayLengthMinus1", 5)
-			sps.CpbRemovalDelayLengthMinus1 = nextField("CpbRemovalDelayLengthMinus1", 5)
-			sps.DpbOutputDelayLengthMinus1 = nextField("DpbOutputDelayLengthMinus1", 5)
-			sps.TimeOffsetLength = nextField("TimeOffsetLength", 5)
+			sps.InitialCpbRemovalDelayLengthMinus1 = b.NextField("InitialCpbRemovalDelayLengthMinus1", 5)
+			sps.CpbRemovalDelayLengthMinus1 = b.NextField("CpbRemovalDelayLengthMinus1", 5)
+			sps.DpbOutputDelayLengthMinus1 = b.NextField("DpbOutputDelayLengthMinus1", 5)
+			sps.TimeOffsetLength = b.NextField("TimeOffsetLength", 5)
 		}
 	}
-	sps.Profile = nextField("ProfileIDC", 8)
-	sps.Constraint0 = nextField("Constraint0", 1)
-	sps.Constraint1 = nextField("Constraint1", 1)
-	sps.Constraint2 = nextField("Constraint2", 1)
-	sps.Constraint3 = nextField("Constraint3", 1)
-	sps.Constraint4 = nextField("Constraint4", 1)
-	sps.Constraint5 = nextField("Constraint5", 1)
-	_ = nextField("ReservedZeroBits", 2)
-	sps.Level = nextField("LevelIDC", 8)
-	// sps.ID = nextField("SPSID", 6) // proper
-	sps.ID = ue(b.golomb(rbsp))
-	sps.ChromaFormat = ue(b.golomb(rbsp))
+	sps.Profile = b.NextField("ProfileIDC", 8)
+	sps.Constraint0 = b.NextField("Constraint0", 1)
+	sps.Constraint1 = b.NextField("Constraint1", 1)
+	sps.Constraint2 = b.NextField("Constraint2", 1)
+	sps.Constraint3 = b.NextField("Constraint3", 1)
+	sps.Constraint4 = b.NextField("Constraint4", 1)
+	sps.Constraint5 = b.NextField("Constraint5", 1)
+	_ = b.NextField("ReservedZeroBits", 2)
+	sps.Level = b.NextField("LevelIDC", 8)
+	// sps.ID = b.NextField("SPSID", 6) // proper
+	sps.ID = ue(b.golomb())
+	sps.ChromaFormat = ue(b.golomb())
 	// This should be done only for certain ProfileIDC:
 	isProfileIDC := []int{100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135}
 	// SpecialProfileCase1
 	if isInList(isProfileIDC, sps.Profile) {
 		if sps.ChromaFormat == 3 {
-			if v := nextField("SeperateColorPlaneFlag", 1); v == 1 {
+			if v := b.NextField("SeperateColorPlaneFlag", 1); v == 1 {
 				sps.UseSeparateColorPlane = true
 			} else {
 				sps.UseSeparateColorPlane = false
 			}
 		}
 
-		sps.BitDepthLumaMinus8 = ue(b.golomb(rbsp))
-		sps.BitDepthChromaMinus8 = ue(b.golomb(rbsp))
-		if v := nextField("QPrimeYZeroTransformBypassFlag", 1); v == 1 {
+		sps.BitDepthLumaMinus8 = ue(b.golomb())
+		sps.BitDepthChromaMinus8 = ue(b.golomb())
+		if v := b.NextField("QPrimeYZeroTransformBypassFlag", 1); v == 1 {
 			sps.QPrimeYZeroTransformBypass = true
 		} else {
 			sps.QPrimeYZeroTransformBypass = false
 		}
-		if v := nextField("SequenceScalingMatrixPresentFlag", 1); v == 1 {
+		if v := b.NextField("SequenceScalingMatrixPresentFlag", 1); v == 1 {
 			sps.SeqScalingMatrixPresent = true
 		} else {
 			sps.SeqScalingMatrixPresent = false
@@ -268,7 +257,7 @@ func NewSPS(rbsp []byte) SPS {
 			}
 			logger.Printf("\tbuilding Scaling matrix for %d elements\n", max)
 			for i := 0; i < max; i++ {
-				if v := nextField(fmt.Sprintf("SeqScalingListPresentFlag[%d]", i), 1); v == 1 {
+				if v := b.NextField(fmt.Sprintf("SeqScalingListPresentFlag[%d]", i), 1); v == 1 {
 					sps.SeqScalingList = append(sps.SeqScalingList, true)
 				} else {
 					sps.SeqScalingList = append(sps.SeqScalingList, false)
@@ -276,7 +265,7 @@ func NewSPS(rbsp []byte) SPS {
 				if sps.SeqScalingList[i] {
 					if i < 6 {
 						scalingList(
-							b, rbsp,
+							b,
 							ScalingList4x4[i],
 							16,
 							DefaultScalingMatrix4x4[i])
@@ -284,7 +273,7 @@ func NewSPS(rbsp []byte) SPS {
 					} else {
 						// 8x8 Page 76 top
 						scalingList(
-							b, rbsp,
+							b,
 							ScalingList8x8[i],
 							64,
 							DefaultScalingMatrix8x8[i-6])
@@ -297,151 +286,152 @@ func NewSPS(rbsp []byte) SPS {
 	// showSPS()
 	// return sps
 	// Possibly wrong due to no scaling list being built
-	sps.Log2MaxFrameNumMinus4 = ue(b.golomb(rbsp))
-	sps.PicOrderCountType = ue(b.golomb(rbsp))
+	sps.Log2MaxFrameNumMinus4 = ue(b.golomb())
+	sps.PicOrderCountType = ue(b.golomb())
 	if sps.PicOrderCountType == 0 {
-		sps.Log2MaxPicOrderCntLSBMin4 = ue(b.golomb(rbsp))
+		sps.Log2MaxPicOrderCntLSBMin4 = ue(b.golomb())
 	} else if sps.PicOrderCountType == 1 {
-		if v := nextField("DeltaPicOrderAlwaysZeroFlag", 1); v == 1 {
+		if v := b.NextField("DeltaPicOrderAlwaysZeroFlag", 1); v == 1 {
 			sps.DeltaPicOrderAlwaysZero = true
 		} else {
 			sps.DeltaPicOrderAlwaysZero = false
 		}
-		sps.OffsetForNonRefPic = se(b.golomb(rbsp))
-		sps.OffsetForTopToBottomField = se(b.golomb(rbsp))
-		sps.NumRefFramesInPicOrderCntCycle = ue(b.golomb(rbsp))
+		sps.OffsetForNonRefPic = se(b.golomb())
+		sps.OffsetForTopToBottomField = se(b.golomb())
+		sps.NumRefFramesInPicOrderCntCycle = ue(b.golomb())
 
 		for i := 0; i < sps.NumRefFramesInPicOrderCntCycle; i++ {
 			sps.OffsetForRefFrameList = append(
 				sps.OffsetForRefFrameList,
-				se(b.golomb(rbsp)))
+				se(b.golomb()))
 		}
 
 	}
-	sps.MaxNumRefFrames = ue(b.golomb(rbsp))
-	if v := nextField("GapsInFrameNumValueAllowedFlag", 1); v == 1 {
+	sps.MaxNumRefFrames = ue(b.golomb())
+	if v := b.NextField("GapsInFrameNumValueAllowedFlag", 1); v == 1 {
 		sps.GapsInFrameNumValueAllowed = true
 	}
-	sps.PicWidthInMbsMinus1 = ue(b.golomb(rbsp))
-	sps.PicHeightInMapUnitsMinus1 = ue(b.golomb(rbsp))
-	if v := nextField("FrameMbsOnlyFlag", 1); v == 1 {
+	sps.PicWidthInMbsMinus1 = ue(b.golomb())
+	sps.PicHeightInMapUnitsMinus1 = ue(b.golomb())
+	if v := b.NextField("FrameMbsOnlyFlag", 1); v == 1 {
 		sps.FrameMbsOnly = true
 	}
 	if !sps.FrameMbsOnly {
-		if v := nextField("MBAdaptiveFrameFieldFlag", 1); v == 1 {
+		if v := b.NextField("MBAdaptiveFrameFieldFlag", 1); v == 1 {
 			sps.MBAdaptiveFrameField = true
 		}
 	}
-	if v := nextField("Direct8x8InferenceFlag", 1); v == 1 {
+	if v := b.NextField("Direct8x8InferenceFlag", 1); v == 1 {
 		sps.Direct8x8Inference = true
 	}
-	if v := nextField("FrameCroppingFlag", 1); v == 1 {
+	if v := b.NextField("FrameCroppingFlag", 1); v == 1 {
 		sps.FrameCropping = true
 	}
+	debugPacket("SPS", sps)
 	if sps.FrameCropping {
-		sps.FrameCropLeftOffset = ue(b.golomb(rbsp))
-		sps.FrameCropRightOffset = ue(b.golomb(rbsp))
-		sps.FrameCropTopOffset = ue(b.golomb(rbsp))
-		sps.FrameCropBottomOffset = ue(b.golomb(rbsp))
+		sps.FrameCropLeftOffset = ue(b.golomb())
+		sps.FrameCropRightOffset = ue(b.golomb())
+		sps.FrameCropTopOffset = ue(b.golomb())
+		sps.FrameCropBottomOffset = ue(b.golomb())
 	}
-	if v := nextField("VUIParametersPresentFlag", 1); v == 1 {
+	if v := b.NextField("VUIParametersPresentFlag", 1); v == 1 {
 		sps.VuiParametersPresent = true
 	}
 	if sps.VuiParametersPresent {
 		// vui_parameters
-		if v := nextField("AspectRatioInfoPresentFlag", 1); v == 1 {
+		if v := b.NextField("AspectRatioInfoPresentFlag", 1); v == 1 {
 			sps.AspectRatioInfoPresent = true
 		}
 		if sps.AspectRatioInfoPresent {
-			sps.AspectRatio = nextField("AspectRatioIDC", 8)
+			sps.AspectRatio = b.NextField("AspectRatioIDC", 8)
 			EXTENDED_SAR := 999
 			if sps.AspectRatio == EXTENDED_SAR {
-				sps.SarWidth = nextField("SARWidth", 16)
-				sps.SarHeight = nextField("SARHeight", 16)
+				sps.SarWidth = b.NextField("SARWidth", 16)
+				sps.SarHeight = b.NextField("SARHeight", 16)
 			}
 		}
-		if v := nextField("OverscanInfoPresentFlag", 1); v == 1 {
+		if v := b.NextField("OverscanInfoPresentFlag", 1); v == 1 {
 			sps.OverscanInfoPresent = true
 		}
 		if sps.OverscanInfoPresent {
-			if v := nextField("OverscanAppropriateFlag", 1); v == 1 {
+			if v := b.NextField("OverscanAppropriateFlag", 1); v == 1 {
 				sps.OverscanAppropriate = true
 			}
 		}
-		if v := nextField("VideoSignalPresentFlag", 1); v == 1 {
+		if v := b.NextField("VideoSignalPresentFlag", 1); v == 1 {
 			sps.VideoSignalTypePresent = true
 		}
 		if sps.VideoSignalTypePresent {
-			sps.VideoFormat = nextField("VideoFormat", 3)
+			sps.VideoFormat = b.NextField("VideoFormat", 3)
 		}
 		if sps.VideoSignalTypePresent {
-			if v := nextField("VideoFullRangeFlag", 1); v == 1 {
+			if v := b.NextField("VideoFullRangeFlag", 1); v == 1 {
 				sps.VideoFullRange = true
 			}
-			if v := nextField("ColorDescriptionPresentFlag", 1); v == 1 {
+			if v := b.NextField("ColorDescriptionPresentFlag", 1); v == 1 {
 				sps.ColorDescriptionPresent = true
 			}
 			if sps.ColorDescriptionPresent {
-				sps.ColorPrimaries = nextField("ColorPrimaries", 8)
-				sps.TransferCharacteristics = nextField("TransferCharacteristics", 8)
-				sps.MatrixCoefficients = nextField("MatrixCoefficients", 8)
+				sps.ColorPrimaries = b.NextField("ColorPrimaries", 8)
+				sps.TransferCharacteristics = b.NextField("TransferCharacteristics", 8)
+				sps.MatrixCoefficients = b.NextField("MatrixCoefficients", 8)
 			}
 		}
-		if v := nextField("ChromaLocInfoPresentFlag", 1); v == 1 {
+		if v := b.NextField("ChromaLocInfoPresentFlag", 1); v == 1 {
 			sps.ChromaLocInfoPresent = true
 		}
 		if sps.ChromaLocInfoPresent {
-			sps.ChromaSampleLocTypeTopField = ue(b.golomb(rbsp))
-			sps.ChromaSampleLocTypeBottomField = ue(b.golomb(rbsp))
+			sps.ChromaSampleLocTypeTopField = ue(b.golomb())
+			sps.ChromaSampleLocTypeBottomField = ue(b.golomb())
 		}
 
-		if v := nextField("TimingInfoPresentFlag", 1); v == 1 {
+		if v := b.NextField("TimingInfoPresentFlag", 1); v == 1 {
 			sps.TimingInfoPresent = true
 		}
 		if sps.TimingInfoPresent {
-			sps.NumUnitsInTick = nextField("NumUnitsInTick", 32)
-			sps.TimeScale = nextField("TimeScale", 32)
-			if v := nextField("FixedFramerateFlag", 1); v == 1 {
+			sps.NumUnitsInTick = b.NextField("NumUnitsInTick", 32)
+			sps.TimeScale = b.NextField("TimeScale", 32)
+			if v := b.NextField("FixedFramerateFlag", 1); v == 1 {
 				sps.FixedFrameRate = true
 			}
 		}
-		if v := nextField("NALHRDParametersPresent", 1); v == 1 {
+		if v := b.NextField("NALHRDParametersPresent", 1); v == 1 {
 			sps.NalHrdParametersPresent = true
 		}
 		if sps.NalHrdParametersPresent {
 			hrdParameters()
 		}
-		if v := nextField("VCLHRDParametersPresent", 1); v == 1 {
+		if v := b.NextField("VCLHRDParametersPresent", 1); v == 1 {
 			sps.VclHrdParametersPresent = true
 		}
 		if sps.VclHrdParametersPresent {
 			hrdParameters()
 		}
 		if sps.NalHrdParametersPresent || sps.VclHrdParametersPresent {
-			if v := nextField("LowHRDDelayFlag", 1); v == 1 {
+			if v := b.NextField("LowHRDDelayFlag", 1); v == 1 {
 				sps.LowHrdDelay = true
 			}
 		}
-		if v := nextField("PicStructPresentFlag", 1); v == 1 {
+		if v := b.NextField("PicStructPresentFlag", 1); v == 1 {
 			sps.PicStructPresent = true
 		}
-		if v := nextField("BitstreamRestrictionFlag", 1); v == 1 {
+		if v := b.NextField("BitstreamRestrictionFlag", 1); v == 1 {
 			sps.BitstreamRestriction = true
 		}
 		if sps.BitstreamRestriction {
-			if v := nextField("MotionVectorsOverPicBoundaries", 1); v == 1 {
+			if v := b.NextField("MotionVectorsOverPicBoundaries", 1); v == 1 {
 				sps.MotionVectorsOverPicBoundaries = true
 			}
-			sps.MaxBytesPerPicDenom = ue(b.golomb(rbsp))
-			sps.MaxBitsPerMbDenom = ue(b.golomb(rbsp))
-			sps.Log2MaxMvLengthHorizontal = ue(b.golomb(rbsp))
-			sps.Log2MaxMvLengthVertical = ue(b.golomb(rbsp))
-			sps.MaxNumReorderFrames = ue(b.golomb(rbsp))
-			sps.MaxDecFrameBuffering = ue(b.golomb(rbsp))
+			sps.MaxBytesPerPicDenom = ue(b.golomb())
+			sps.MaxBitsPerMbDenom = ue(b.golomb())
+			sps.Log2MaxMvLengthHorizontal = ue(b.golomb())
+			sps.Log2MaxMvLengthVertical = ue(b.golomb())
+			sps.MaxNumReorderFrames = ue(b.golomb())
+			sps.MaxDecFrameBuffering = ue(b.golomb())
 		}
 
 	} // End VuiParameters Annex E.1.1
 
 	debugPacket("SPS", sps)
-	return sps
+	return &sps
 }

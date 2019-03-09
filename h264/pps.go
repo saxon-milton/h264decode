@@ -37,9 +37,9 @@ type PPS struct {
 	SecondChromaQpIndexOffset         int
 }
 
-func NewPPS(sps *SPS, rbsp []byte) *PPS {
-	logger.Printf("== PPS RBSP %d bytes %d bits == \n", len(rbsp), len(rbsp)*8)
-	logger.Printf("\t%#v\n", rbsp[0:8])
+func NewPPS(sps *SPS, rbsp []byte, showPacket bool) *PPS {
+	logger.Printf("debug: PPS RBSP %d bytes %d bits == \n", len(rbsp), len(rbsp)*8)
+	logger.Printf("debug: \t%#v\n", rbsp[0:8])
 	pps := PPS{}
 	b := &BitReader{bytes: rbsp}
 	flagField := func() bool {
@@ -89,9 +89,9 @@ func NewPPS(sps *SPS, rbsp []byte) *PPS {
 	pps.ConstrainedIntraPred = flagField()
 	pps.RedundantPicCntPresent = flagField()
 
-	logger.Printf("\tChecking for more PPS data")
+	logger.Printf("debug: \tChecking for more PPS data")
 	if b.HasMoreData() {
-		logger.Printf("\tProcessing additional PPS data")
+		logger.Printf("debug: \tProcessing additional PPS data")
 		pps.Transform8x8Mode = b.NextField("Transform8x8ModeFlag", 1)
 		pps.PicScalingMatrixPresent = flagField()
 		if pps.PicScalingMatrixPresent {
@@ -125,7 +125,9 @@ func NewPPS(sps *SPS, rbsp []byte) *PPS {
 		// rbspTrailingBits()
 	}
 
-	debugPacket("PPS", pps)
+	if showPacket {
+		debugPacket("PPS", pps)
+	}
 	return &pps
 
 }

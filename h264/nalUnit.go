@@ -1,33 +1,39 @@
 package h264
 
-import "fmt"
-
 type NalUnit struct {
-	NumBytes             int
-	ForbiddenZeroBit     int
-	RefIdc               int
-	Type                 int
-	SvcExtensionFlag     int
-	Avc3dExtensionFlag   int
-	IdrFlag              int
-	PriorityId           int
-	NoInterLayerPredFlag int
-	DependencyId         int
-	QualityId            int
-	TemporalId           int
-	UseRefBasePicFlag    int
-	DiscardableFlag      int
-	OutputFlag           int
-	ReservedThree2Bits   int
-	HeaderBytes          int
-	NonIdrFlag           int
-	ViewId               int
-	AnchorPicFlag        int
-	InterViewFlag        int
-	ReservedOneBit       int
-	ViewIdx              int
-	DepthFlag            int
-	rbsp                 []byte
+	NumBytes                     int
+	ForbiddenZeroBit             int
+	RefIdc                       int
+	Type                         int
+	SvcExtensionFlag             int
+	Avc3dExtensionFlag           int
+	IdrFlag                      int
+	PriorityId                   int
+	NoInterLayerPredFlag         int
+	DependencyId                 int
+	QualityId                    int
+	TemporalId                   int
+	UseRefBasePicFlag            int
+	DiscardableFlag              int
+	OutputFlag                   int
+	ReservedThree2Bits           int
+	HeaderBytes                  int
+	NonIdrFlag                   int
+	ViewId                       int
+	AnchorPicFlag                int
+	InterViewFlag                int
+	ReservedOneBit               int
+	ViewIdx                      int
+	DepthFlag                    int
+	EmulationPreventionThreeByte byte
+	rbsp                         []byte
+}
+
+func isEmulationPreventionThreeByte(b []byte) bool {
+	if len(b) != 3 {
+		return false
+	}
+	return b[0] == byte(0) && b[1] == byte(0) && b[2] == byte(3)
 }
 
 func NalUnitHeaderSvcExtension(nalUnit *NalUnit, b *BitReader) {
@@ -63,12 +69,13 @@ func NalUnitHeaderMvcExtension(nalUnit *NalUnit, b *BitReader) {
 	nalUnit.InterViewFlag = b.NextField("InterViewFlag", 1)
 	nalUnit.ReservedOneBit = b.NextField("ReservedOneBit", 1)
 }
-
-func NewNalUnit(frame []byte) *NalUnit {
-	fmt.Printf("== NalUnit %d\n", len(frame))
-	fmt.Printf(" == %#v\n", frame[0:8])
+func (n *NalUnit) RBSP() []byte {
+	return n.rbsp
+}
+func NewNalUnit(frame []byte, numBytesInNal int) *NalUnit {
+	logger.Printf("debug: reading %d byte NAL\n", numBytesInNal)
 	nalUnit := NalUnit{
-		NumBytes:    len(frame),
+		NumBytes:    numBytesInNal,
 		HeaderBytes: 1,
 	}
 	b := &BitReader{bytes: frame}
@@ -94,17 +101,31 @@ func NewNalUnit(frame []byte) *NalUnit {
 
 		}
 	}
-
+	b.LogStreamPosition()
+	logger.Printf("debug: found %d byte header. Reading body\n", nalUnit.HeaderBytes)
 	for i := nalUnit.HeaderBytes; i < nalUnit.NumBytes; i++ {
-		var nextBitsIs3 bool
-		if frame[i] == byte(0) && frame[i+1] == byte(0) && frame[1+2] == byte(3) {
-			nextBitsIs3 = true
+		next3Bytes, err := b.PeekBytes(3)
+		if err != nil {
+			logger.Printf("error: while reading next 3 NAL bytes: %v\n", err)
+			break
 		}
-		if i+2 < nalUnit.NumBytes && nextBitsIs3 {
+		// Little odd, the err above and the i+2 check might be synonyms
+		if i+2 < nalUnit.NumBytes && isEmulationPreventionThreeByte(next3Bytes) {
+			_b, _ := b.ReadBytes(3)
+			nalUnit.rbsp = append(nalUnit.rbsp, _b[:2]...)
+			i += 2
+			nalUnit.EmulationPreventionThreeByte = _b[2]
+		} else {
+			if _b, err := b.ReadByte(); err == nil {
+				nalUnit.rbsp = append(nalUnit.rbsp, _b)
+			} else {
+				logger.Printf("error: while reading byte %d of %d nal bytes: %v\n", i, nalUnit.NumBytes, err)
+				break
+			}
 		}
 	}
 
-	nalUnit.rbsp = frame[nalUnit.HeaderBytes:]
-	logger.Printf("info: decoded %s NAL\n", NALUnitType[nalUnit.Type])
+	// nalUnit.rbsp = frame[nalUnit.HeaderBytes:]
+	logger.Printf("info: decoded %s NAL with %d RBSP bytes\n", NALUnitType[nalUnit.Type], len(nalUnit.rbsp))
 	return &nalUnit
 }

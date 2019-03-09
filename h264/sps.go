@@ -164,9 +164,9 @@ func isInList(l []int, term int) bool {
 	return false
 }
 func debugPacket(name string, packet interface{}) {
-	logger.Printf("%s packet\n", name)
+	logger.Printf("debug: %s packet\n", name)
 	for _, line := range strings.Split(fmt.Sprintf("%+v", packet), " ") {
-		logger.Printf("\t%#v\n", line)
+		logger.Printf("debug: \t%#v\n", line)
 	}
 }
 func scalingList(b *BitReader, scalingList []int, sizeOfScalingList int, defaultScalingMatrix []int) {
@@ -189,9 +189,9 @@ func scalingList(b *BitReader, scalingList []int, sizeOfScalingList int, default
 		lastScale = scalingList[i]
 	}
 }
-func NewSPS(rbsp []byte) *SPS {
-	logger.Printf(" == SPS RBSP %d bytes %d bits == \n", len(rbsp), len(rbsp)*8)
-	logger.Printf("\t== %#v\n", rbsp[0:8])
+func NewSPS(rbsp []byte, showPacket bool) *SPS {
+	logger.Printf("debug: SPS RBSP %d bytes %d bits\n", len(rbsp), len(rbsp)*8)
+	logger.Printf("debug: \t%#v\n", rbsp[0:8])
 	sps := SPS{}
 	b := &BitReader{bytes: rbsp}
 	hrdParameters := func() {
@@ -255,7 +255,7 @@ func NewSPS(rbsp []byte) *SPS {
 			if sps.ChromaFormat != 3 {
 				max = 8
 			}
-			logger.Printf("\tbuilding Scaling matrix for %d elements\n", max)
+			logger.Printf("debug: \tbuilding Scaling matrix for %d elements\n", max)
 			for i := 0; i < max; i++ {
 				if v := b.NextField(fmt.Sprintf("SeqScalingListPresentFlag[%d]", i), 1); v == 1 {
 					sps.SeqScalingList = append(sps.SeqScalingList, true)
@@ -327,7 +327,6 @@ func NewSPS(rbsp []byte) *SPS {
 	if v := b.NextField("FrameCroppingFlag", 1); v == 1 {
 		sps.FrameCropping = true
 	}
-	debugPacket("SPS", sps)
 	if sps.FrameCropping {
 		sps.FrameCropLeftOffset = ue(b.golomb())
 		sps.FrameCropRightOffset = ue(b.golomb())
@@ -431,7 +430,8 @@ func NewSPS(rbsp []byte) *SPS {
 		}
 
 	} // End VuiParameters Annex E.1.1
-
-	debugPacket("SPS", sps)
+	if showPacket {
+		debugPacket("SPS", sps)
+	}
 	return &sps
 }

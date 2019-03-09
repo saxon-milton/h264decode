@@ -1,27 +1,18 @@
-# NightLife
+Listens for a stream of H264 bytes on port 8000.
 
-Using an 840nm infrared light, a Rpi3.B+, and NoIR camera, find bright glowing orbs (animal eyes), humans without lights, and humans with lights. 
+A stream is read sequentially dropping each NAL into a struct with access to the RBSP and seekable features. No interface contracts are implemented right now. This is heavily a work in progress.
 
-# Motivation
+# TODO
 
-On occassion, the area around where I live has car break-ins and gas syphoning. We also have a diverse collection of wildlife varying from semi-domestic cats to coyotes and mountain lions.
+* CABAC initialization
+* Context-adaptive arithmetic entropy-coded syntax element support
+* Macroblock to YCbCr image decoding
 
-## Detecting Cars
+# Background
 
-It seems like cars are going to create large area of brightness relative to the image size. We'll peg an image as a car if that's what is going on and keep tracking of +/- 2 seconds around its appearance.
+The last point was and is the entire driving force behind this project: To decode a single frame to an image and begin doing computer vision tasks on it. A while back, this project was started to keep an eye on rodents moving their way around various parts of our house and property. What was supposed to happen was motion detected from one-frame to another of an MJPEG stream would trigger capturing the stream. Analyzing the stream, even down at 24 fps, caused captures to be triggered too late. When it was triggered, there was so much blur in the resulting captured stream, it wasn't very watchable.
 
-## Detecting Animals
+Doing a little prototyping it was apparent reading an h.264 stream into VLC provided a watchable, unblurry, video. With a little searching on the internet, (https://github.com/gqf2008/codec) provided an example of using [ffMPEG](https://www.ffmpeg.org/) to decode an h.264 frame/NAL unit's macroblocks into a YCbCr image. Were this some shippable product with deadlines and things, [GGF2008](https://github.com/gqf2008/codec) would've been wired up and progress would've happened. But this is a tinkering project. Improving development skills, learning a bit about streaming deata, and filling dead-air were the criteria for this project.
 
-Night animals have a slight reflective coating to their eyes, this would be one factor in finding. Another factor is their height which would be likely 2/3 or less of what's determined as a human's height.
-
-## Detecting Humans
-
-Humans come with and without flashlights. Humans with flashlights are kind of like slow moving cars. Humans without lflashlights are tall vertical animals.
-
-## Camera Notes
-
-* AWB gains are in the (315/256, 90/64) in the late afternoon at the North side of the house (15:00 2018/12/07)
-* Framerate of 40 seems stable
-* AWB gains are in the (197/128, 163/128) range in the early twilight at the North side of the house (16:30 2018/12/07)
-
+Because of that, a pure Go h.264 stream decoder was the only option. Duh.
 

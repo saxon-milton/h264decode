@@ -5,6 +5,11 @@ import (
 	"math"
 )
 
+type VideoStream struct {
+	SPS    *SPS
+	PPS    *PPS
+	Slices []*SliceContext
+}
 type SliceContext struct {
 	*NalUnit
 	*SPS
@@ -559,8 +564,8 @@ func MbaffFrameFlag(sps *SPS, header *SliceHeader) int {
 }
 
 func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
-	logger.Printf("== SliceData starts at ByteOffset: %d BitOffset %d\n", b.byteOffset, b.bitOffset)
-	logger.Printf("\t== %d bytes remain ==\n", len(b.bytes)-b.byteOffset)
+	logger.Printf("debug: SliceData starts at ByteOffset: %d BitOffset %d\n", b.byteOffset, b.bitOffset)
+	logger.Printf("debug: \t== %d bytes remain ==\n", len(b.bytes)-b.byteOffset)
 	sliceContext.Slice.Data = &SliceData{}
 	flagField := func() bool {
 		if v := b.NextField("", 1); v == 1 {
@@ -584,11 +589,11 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 	prevMbSkipped := 0
 	sliceContext.Slice.Data.SliceTypeName = sliceTypeMap[sliceContext.Slice.Header.SliceType]
 	sliceContext.Slice.Data.MbTypeName = MbTypeName(sliceContext.Slice.Data.SliceTypeName, sliceContext.Slice.Data.MbType)
-	logger.Printf("\tSliceData: Processing moreData: %v\n", moreDataFlag)
+	logger.Printf("debug: \tSliceData: Processing moreData: %v\n", moreDataFlag)
 	for moreDataFlag {
-		logger.Printf("\tLooking for more sliceContext.Slice.Data in slice type %s\n", sliceContext.Slice.Data.SliceTypeName)
+		logger.Printf("debug: \tLooking for more sliceContext.Slice.Data in slice type %s\n", sliceContext.Slice.Data.SliceTypeName)
 		if sliceContext.Slice.Data.SliceTypeName != "I" && sliceContext.Slice.Data.SliceTypeName != "SI" {
-			logger.Printf("\tNonI/SI slice, processing moreData\n")
+			logger.Printf("debug: \tNonI/SI slice, processing moreData\n")
 			if sliceContext.PPS.EntropyCodingMode == 0 {
 				sliceContext.Slice.Data.MbSkipRun = ue(b.golomb())
 				if sliceContext.Slice.Data.MbSkipRun > 0 {
@@ -599,13 +604,13 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 					currMbAddr = nextMbAddress(currMbAddr, sliceContext.SPS, sliceContext.PPS, sliceContext.Slice.Header)
 				}
 				if sliceContext.Slice.Data.MbSkipRun > 0 {
-					logger.Printf("\tNon-I/SI: Checking for more sliceContext.Slice.Data %d:%d:%d\n", b.byteOffset, b.bitOffset, len(b.Bytes()))
+					logger.Printf("debug: \tNon-I/SI: Checking for more sliceContext.Slice.Data %d:%d:%d\n", b.byteOffset, b.bitOffset, len(b.Bytes()))
 					moreDataFlag = b.MoreRBSPData()
 				}
 			} else {
 				sliceContext.Slice.Data.MbSkipFlag = flagField()
 
-				logger.Printf("\tNon-I/SI: Eval MbSkipFlag[%v] %d:%d:%d\n", sliceContext.Slice.Data.MbSkipFlag, b.byteOffset, b.bitOffset, len(b.Bytes()))
+				logger.Printf("debug: \tNon-I/SI: Eval MbSkipFlag[%v] %d:%d:%d\n", sliceContext.Slice.Data.MbSkipFlag, b.byteOffset, b.bitOffset, len(b.Bytes()))
 				moreDataFlag = !sliceContext.Slice.Data.MbSkipFlag
 			}
 		}
@@ -739,7 +744,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 
 		} // END MacroblockLayer
 		if sliceContext.PPS.EntropyCodingMode == 0 {
-			logger.Printf("\tNon-I/SI: Again Checking for more sliceContext.Slice.Data %d:%d:%d\n", b.byteOffset, b.bitOffset, len(b.Bytes()))
+			logger.Printf("debug: \tNon-I/SI: Again Checking for more sliceContext.Slice.Data %d:%d:%d\n", b.byteOffset, b.bitOffset, len(b.Bytes()))
 			moreDataFlag = b.MoreRBSPData()
 		} else {
 			if sliceContext.Slice.Data.SliceTypeName != "I" && sliceContext.Slice.Data.SliceTypeName != "SI" {
@@ -750,12 +755,12 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 				}
 			}
 			if mbaffFrameFlag == 1 && currMbAddr%2 == 0 {
-				logger.Printf("\tNon-I/SI: More sliceContext.Slice.Data at currMbAddr[%v] sliceContext.Slice.Data %d:%d:%d\n", currMbAddr, b.byteOffset, b.bitOffset, len(b.Bytes()))
+				logger.Printf("debug: \tNon-I/SI: More sliceContext.Slice.Data at currMbAddr[%v] sliceContext.Slice.Data %d:%d:%d\n", currMbAddr, b.byteOffset, b.bitOffset, len(b.Bytes()))
 				moreDataFlag = true
 			} else {
 				// TODO: ae implementation
 				sliceContext.Slice.Data.EndOfSliceFlag = flagField() // ae(b.golomb())
-				logger.Printf("\tNon-I/SI: End of slice[%v] %d:%d:%d\n", sliceContext.Slice.Data.EndOfSliceFlag, b.byteOffset, b.bitOffset, len(b.Bytes()))
+				logger.Printf("debug: \tNon-I/SI: End of slice[%v] %d:%d:%d\n", sliceContext.Slice.Data.EndOfSliceFlag, b.byteOffset, b.bitOffset, len(b.Bytes()))
 				moreDataFlag = !sliceContext.Slice.Data.EndOfSliceFlag
 			}
 		}
@@ -767,10 +772,11 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 func (c *SliceContext) Update(header *SliceHeader, data *SliceData) {
 	c.Slice = &Slice{Header: header, Data: data}
 }
-
-func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceContext {
-	logger.Printf("== %s RBSP %d bytes %d bits == \n", NALUnitType[nalUnit.Type], len(rbsp), len(rbsp)*8)
-	logger.Printf("\t== %#v\n", rbsp[0:8])
+func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, showPacket bool) *SliceContext {
+	sps := videoStream.SPS
+	pps := videoStream.PPS
+	logger.Printf("debug: %s RBSP %d bytes %d bits == \n", NALUnitType[nalUnit.Type], len(rbsp), len(rbsp)*8)
+	logger.Printf("debug: \t%#v\n", rbsp[0:8])
 	var idrPic bool
 	if nalUnit.Type == 5 {
 		idrPic = true
@@ -791,7 +797,7 @@ func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceCo
 	header.FirstMbInSlice = ue(b.golomb())
 	header.SliceType = ue(b.golomb())
 	sliceType := sliceTypeMap[header.SliceType]
-	logger.Printf("== %s (%s) slice of %d bytes\n", NALUnitType[nalUnit.Type], sliceType, len(rbsp))
+	logger.Printf("debug: %s (%s) slice of %d bytes\n", NALUnitType[nalUnit.Type], sliceType, len(rbsp))
 	header.PPSID = ue(b.golomb())
 	if sps.UseSeparateColorPlane {
 		header.ColorPlaneID = b.NextField("ColorPlaneID", 2)
@@ -974,7 +980,9 @@ func NewSliceContext(nalUnit *NalUnit, sps *SPS, pps *PPS, rbsp []byte) *SliceCo
 		},
 	}
 	sliceContext.Slice.Data = NewSliceData(sliceContext, b)
-	debugPacket("Header", sliceContext.Slice.Header)
-	debugPacket("Data", sliceContext.Slice.Data)
+	if showPacket {
+		debugPacket("debug: Header", sliceContext.Slice.Header)
+		debugPacket("debug: Data", sliceContext.Slice.Data)
+	}
 	return sliceContext
 }

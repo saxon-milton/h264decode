@@ -5,6 +5,7 @@ import (
 	"github.com/mrmod/degolomb"
 	"io"
 	"math"
+	"os"
 )
 
 type BitReader struct {
@@ -12,10 +13,14 @@ type BitReader struct {
 	byteOffset int
 	bitOffset  int
 	bitsRead   int
+	Debug      bool
 }
 type H264Reader struct {
-	IsStarted bool
-	Stream    io.Reader
+	IsStarted    bool
+	Stream       io.Reader
+	NalUnits     []*BitReader
+	VideoStreams []*VideoStream
+	DebugFile    *os.File
 	*BitReader
 }
 
@@ -26,6 +31,9 @@ func (h *H264Reader) BufferToReader(cntBytes int) error {
 		return err
 	}
 	h.bytes = append(h.bytes, buf...)
+	if h.DebugFile != nil {
+		h.DebugFile.Write(buf)
+	}
 	h.byteOffset += cntBytes
 	return nil
 }
@@ -210,8 +218,10 @@ func (b *BitReader) MoreRBSPData() bool {
 	return cnt > 0
 }
 func (b *BitReader) HasMoreData() bool {
-	logger.Printf("\tHasMoreData: %+v\n", b)
-	logger.Printf("\tHas %d more bytes\n", len(b.bytes)-b.byteOffset)
+	if b.Debug {
+		logger.Printf("\tHasMoreData: %+v\n", b)
+		logger.Printf("\tHas %d more bytes\n", len(b.bytes)-b.byteOffset)
+	}
 	return len(b.bytes)-b.byteOffset > 0
 }
 
@@ -230,10 +240,12 @@ func (b *BitReader) RewindBits(n int) error {
 		if err := b.RewindBytes(nBytes); err != nil {
 			return err
 		}
-		b.bitOffset -= n / 8
+		b.bitsRead -= n
+		b.setOffset()
 		return nil
 	}
-	b.bitOffset -= n
+	b.bitsRead -= n
+	b.setOffset()
 	return nil
 }
 
@@ -242,7 +254,18 @@ func (b *BitReader) RewindBytes(n int) error {
 		return fmt.Errorf("attempted to seek below 0")
 	}
 	b.byteOffset -= n
+	b.bitsRead -= n * 8
+	b.setOffset()
 	return nil
+}
+
+// Get bytes without advancing
+func (b *BitReader) PeekBytes(n int) ([]byte, error) {
+	if len(b.bytes) >= b.byteOffset+n {
+		return b.bytes[b.byteOffset : b.byteOffset+n], nil
+	}
+	return []byte{}, fmt.Errorf("EOF: not enough bytes to give %d (%d @ offset %d", n, len(b.bytes), b.byteOffset)
+
 }
 
 // io.ByteReader interface
@@ -254,6 +277,18 @@ func (b *BitReader) ReadByte() (byte, error) {
 	}
 	return byte(0), fmt.Errorf("EOF:  no more bytes")
 }
+func (b *BitReader) ReadBytes(n int) ([]byte, error) {
+	buf := []byte{}
+	for i := 0; i < n; i++ {
+		if _b, err := b.ReadByte(); err == nil {
+			buf = append(buf, _b)
+		} else {
+			return buf, err
+		}
+	}
+	return buf, nil
+}
+
 func (b *BitReader) Read(buf []int) (int, error) {
 	if b.byteOffset > len(b.bytes) {
 		return 0, fmt.Errorf("EOF: %d > %d\n", b.byteOffset, len(b.bytes))
@@ -283,7 +318,9 @@ func (b *BitReader) NextField(name string, bits int) int {
 		fmt.Printf("error reading %d bits for %s: %v\n", bits, name, err)
 		return -1
 	}
-	logger.Printf("\t[%s] %d bits = value[%d]\n", name, bits, bitVal(buf))
+	if b.Debug {
+		logger.Printf("\t[%s] %d bits = value[%d]\n", name, bits, bitVal(buf))
+	}
 	return bitVal(buf)
 }
 func (b *BitReader) StreamPosition() (int, int, int) {

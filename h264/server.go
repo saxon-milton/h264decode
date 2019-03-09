@@ -61,13 +61,13 @@ func isStartCodeOnePrefix(buf []byte) bool {
 	logger.Printf("debug: found start code one prefix byte\n")
 	return true
 }
-func readNalUnit(r *H264Reader) *NalUnit {
+func readNalUnit(r *H264Reader) (*NalUnit, *BitReader) {
 	// Read to start of NAL
-	logger.Printf("debug: Seeking NAL start\n")
+	logger.Printf("debug: Seeking NAL %d start\n", len(r.NalUnits))
 	r.LogStreamPosition()
 	for !isStartSequence(r.Bytes()) {
 		if err := r.BufferToReader(1); err != nil {
-			return nil
+			return nil, nil
 		}
 	}
 	/*
@@ -93,48 +93,75 @@ func readNalUnit(r *H264Reader) *NalUnit {
 	for so == startOffset || !isStartSequence(r.Bytes()) {
 		_, so, _ = r.StreamPosition()
 		if err := r.BufferToReader(1); err != nil {
-			return nil
+			return nil, nil
 		}
 	}
-	logger.Printf("debug: PreRewind %#v\n", r.Bytes())
+	// logger.Printf("debug: PreRewind %#v\n", r.Bytes())
 	// Rewind back the length of the start sequence
-	r.RewindBytes(4)
-	logger.Printf("debug: PostRewind %#v\n", r.Bytes())
+	// r.RewindBytes(4)
+	// logger.Printf("debug: PostRewind %#v\n", r.Bytes())
 	_, endOffset, _ := r.StreamPosition()
 	logger.Printf("debug: found NAL unit with %d bytes from %d to %d\n", endOffset-startOffset, startOffset, endOffset)
-	nalUnitBytes := r.Bytes()[startOffset:]
+	nalUnitReader := &BitReader{bytes: r.Bytes()[startOffset:]}
+	r.NalUnits = append(r.NalUnits, nalUnitReader)
 	r.LogStreamPosition()
-	logger.Printf("debug: NALU: %#v\n", nalUnitBytes[0:8])
-	nalUnit := NewNalUnit(nalUnitBytes)
-	return nalUnit
+	logger.Printf("debug: NAL Header: %#v\n", nalUnitReader.Bytes()[0:8])
+	nalUnit := NewNalUnit(nalUnitReader.Bytes(), len(nalUnitReader.Bytes()))
+	return nalUnit, nalUnitReader
 }
 
 func handleConnection(connection io.Reader) {
 	logger.Printf("debug: handling connection\n")
 	streamFilename := "/home/bruce/devel/go/src/github.com/mrmod/cvnightlife/output.mp4"
 	_ = os.Remove(streamFilename)
-	streamFile, err := os.Create(streamFilename)
+	debugFile, err := os.Create(streamFilename)
 	if err != nil {
 		panic(err)
 	}
-
+	streamReader := &H264Reader{
+		Stream:    connection,
+		BitReader: &BitReader{bytes: []byte{}},
+		DebugFile: debugFile,
+	}
 	c := make(chan os.Signal, 1)
 	signal.Notify(c)
 	go func() {
 		logger.Printf("debug: waiting on signals\n")
 		s := <-c
 		logger.Printf("info: %v received, closing stream file\n", s)
-		streamFile.Close()
+		streamReader.DebugFile.Close()
 		os.Exit(0)
 	}()
-	streamReader := &H264Reader{
-		Stream:    connection,
-		BitReader: &BitReader{bytes: []byte{}},
-	}
-	nalUnit := readNalUnit(streamReader)
-	switch nalUnit.Type {
-	case NALU_TYPE_SPS:
-		_ = NewSPS(nalUnit.rbsp)
+
+	defer func() {
+		if r := recover(); r != nil {
+			logger.Printf("fatal: recovered: %v\n", r)
+			logger.Printf("info: closing streamfile\n")
+			streamReader.DebugFile.Close()
+			os.Exit(1)
+		}
+	}()
+	for {
+		nalUnit, nalReader := readNalUnit(streamReader)
+		_ = nalReader
+		switch nalUnit.Type {
+		case NALU_TYPE_SPS:
+			sps := NewSPS(nalUnit.rbsp, false)
+			streamReader.VideoStreams = append(
+				streamReader.VideoStreams,
+				&VideoStream{SPS: sps},
+			)
+		case NALU_TYPE_PPS:
+			videoStream := streamReader.VideoStreams[len(streamReader.VideoStreams)-1]
+			videoStream.PPS = NewPPS(videoStream.SPS, nalUnit.RBSP(), false)
+		case NALU_TYPE_SLICE_IDR_PICTURE:
+			fallthrough
+		case NALU_TYPE_SLICE_NON_IDR_PICTURE:
+			videoStream := streamReader.VideoStreams[len(streamReader.VideoStreams)-1]
+			logger.Printf("info: frame number %d\n", len(videoStream.Slices))
+			sliceContext := NewSliceContext(videoStream, nalUnit, nalUnit.RBSP(), true)
+			videoStream.Slices = append(videoStream.Slices, sliceContext)
+		}
 	}
 }
 

@@ -7,6 +7,29 @@ A stream is read sequentially dropping each NAL into a struct with access to the
 * CABAC initialization
 * Context-adaptive arithmetic entropy-coded syntax element support
 * Macroblock to YCbCr image decoding
+## Done
+
+* DecodeBypass, 9.3.3.2.3
+* DecodeTerminate, 9.3.3.2.4
+* RenormD - 9.3.3.2.2
+* rangeTableLPS ( Table 9-44 )
+* Derive ctxIDX per 9.3.3.1
+* Select M, N values
+
+### ArithmeticDecoding S 9.3.3.2
+
+* cabac.go : ArithmeticDecoding 9.3.3.3.2
+* cabac.go : DecodeBypass, DecodeTerminate, DecodeDecision
+
+## In Progress
+
+* Make use of DecodeBypass and DecodeTerminate information
+* 9.3.3.2.1 - BinaryDecision
+ * 9.3.3.2.1.1, 9.3.3.2.2
+
+## Next
+
+* Make use of initCabac (initialized CABACs)
 
 # Background
 

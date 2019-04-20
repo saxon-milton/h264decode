@@ -108,22 +108,69 @@ func Decoder9_3_3_1_1_1(condTermFlagA, condTermFlagB int) int {
 	return condTermFlagA + condTermFlagB
 }
 
+// 9-5
 // 7-30 p 112
 func SliceQPy(pps *PPS, header *SliceHeader) int {
 	return 26 + pps.PicInitQpMinus26 + header.SliceQpDelta
 }
 
+// 9-5
+func PreCtxState(m, n, sliceQPy int) int {
+	// slicQPy-subY
+	return Clip3(1, 126, ((m*Clip3(0, 51, sliceQPy))>>4)+n)
+}
+
+func Clip1y(x, bitDepthY int) int {
+	return Clip3(0, (1<<uint(bitDepthY))-1, x)
+}
+func Clipc(x, bitDepthC int) int {
+	return Clip3(0, (1<<uint(bitDepthC))-1, x)
+}
+
+// 5-5
+func Clip3(x, y, z int) int {
+	if z < x {
+		return x
+	}
+	if z > y {
+		return y
+	}
+	return z
+}
+
 type CABAC struct {
+	PStateIdx int
+	ValMPS    int
+	Context   *SliceContext
 }
 
 // table 9-1
-func initCabac(pps *PPS, header *SliceHeader, data *SliceData) {
-	pStateIdx := SliceQPy(pps, header)
-	valMPS := SliceQPy(pps, header)
+func initCabac(binarization *Binarization, context *SliceContext) *CABAC {
+	var valMPS, pStateIdx int
+	// TODO: When to use prefix, when to use suffix?
+	ctxIdx := CtxIdx(
+		binarization.binIdx,
+		binarization.MaxBinIdxCtx.Prefix,
+		binarization.CtxIdxOffset.Prefix)
+	mn := MNVars[ctxIdx]
+
+	preCtxState := PreCtxState(mn[0].M, mn[0].N, SliceQPy(context.PPS, context.Header))
+	if preCtxState <= 63 {
+		pStateIdx = 63 - preCtxState
+		valMPS = 0
+	} else {
+		pStateIdx = preCtxState - 64
+		valMPS = 1
+	}
 	_ = pStateIdx
 	_ = valMPS
 	// Initialization of context variables
 	// Initialization of decoding engine
+	return &CABAC{
+		PStateIdx: pStateIdx,
+		ValMPS:    valMPS,
+		Context:   context,
+	}
 }
 
 // Table 9-36, 9-37
@@ -274,8 +321,9 @@ type Binarization struct {
 	MaxBinIdxCtx
 	CtxIdxOffset
 	UseDecodeBypass int
-	binIdx          int
-	binString       []int
+	// TODO: Why are these private but others aren't?
+	binIdx    int
+	binString []int
 }
 type BinarizationType struct {
 	PrefixSuffix   bool
@@ -288,9 +336,10 @@ type BinarizationType struct {
 	CMaxValue int
 }
 
+// 9.3.2.5
 func NewBinarization(syntaxElement string, data *SliceData) *Binarization {
 	sliceTypeName := data.SliceTypeName
-	logger.Printf("NewBinarization for %s in sliceType %s\n", syntaxElement, sliceTypeName)
+	logger.Printf("debug: binarization of %s in sliceType %s\n", syntaxElement, sliceTypeName)
 	binarization := &Binarization{SyntaxElement: syntaxElement}
 	switch syntaxElement {
 	case "CodedBlockPattern":
@@ -328,8 +377,9 @@ func NewBinarization(syntaxElement string, data *SliceData) *Binarization {
 			Prefix:         47,
 			Suffix:         NA_SUFFIX,
 		}
+		// 9.3.2.5
 	case "MbType":
-		logger.Printf("\tMbType is %s\n", data.MbTypeName)
+		logger.Printf("debug: \tMbType is %s\n", data.MbTypeName)
 		switch sliceTypeName {
 		case "SI":
 			binarization.BinarizationType = BinarizationType{PrefixSuffix: true}
@@ -376,7 +426,134 @@ func NewBinarization(syntaxElement string, data *SliceData) *Binarization {
 	}
 	return binarization
 }
+func (b *Binarization) IsBinStringMatch(bits []int) bool {
+	for i, _b := range bits {
+		if b.binString[i] != _b {
+			return false
+		}
+	}
+	return len(b.binString) == len(bits)
+}
 
+// 9.3.1.2: output is codIRange and codIOffset
+func initDecodingEngine(bitReader *BitReader) (int, int) {
+	logger.Printf("debug: initializing arithmetic decoding engine\n")
+	bitReader.LogStreamPosition()
+	codIRange := 510
+	codIOffset := bitReader.NextField("Initial CodIOffset", 9)
+	logger.Printf("debug: codIRange: %d :: codIOffsset: %d\n", codIRange, codIOffset)
+	return codIRange, codIOffset
+}
+
+// 9.3.3.2: output is value of the bin
+func NewArithmeticDecoding(context *SliceContext, binarization *Binarization, ctxIdx, codIRange, codIOffset int) ArithmeticDecoding {
+	a := ArithmeticDecoding{Context: context, Binarization: binarization}
+	logger.Printf("debug: decoding bypass %d, for ctx %d\n", binarization.UseDecodeBypass, ctxIdx)
+	// TODO: Implement
+	if binarization.UseDecodeBypass == 1 {
+		// TODO: 9.3.3.2.3 : DecodeBypass()
+		codIOffset, a.BinVal = a.DecodeBypass(context.Slice.Data, codIRange, codIOffset)
+
+	} else if binarization.UseDecodeBypass == 0 && ctxIdx == 276 {
+		// TODO: 9.3.3.2.4 : DecodeTerminate()
+	} else {
+		// TODO: 9.3.3.2.1 : DecodeDecision()
+	}
+	a.BinVal = -1
+	return a
+}
+
+// 9.3.3.2.3
+// Invoked when bypassFlag is equal to 1
+func (a ArithmeticDecoding) DecodeBypass(sliceData *SliceData, codIRange, codIOffset int) (int, int) {
+	// Decoded value binVal
+	codIOffset = codIOffset << uint(1)
+	// TODO: Concurrency check
+	// TODO: Possibly should be codIOffset | ReadOneBit
+	codIOffset = codIOffset << uint(sliceData.BitReader.ReadOneBit())
+	if codIOffset >= codIRange {
+		a.BinVal = 1
+		codIOffset -= codIRange
+	} else {
+		a.BinVal = 0
+	}
+	return codIOffset, a.BinVal
+}
+
+// 9.3.3.2.4
+// Decodes endOfSliceFlag and I_PCM
+// Returns codIRange, codIOffSet, decoded value of binVal
+func (a ArithmeticDecoding) DecodeTerminate(sliceData *SliceData, codIRange, codIOffset int) (int, int, int) {
+	codIRange -= 2
+	if codIOffset >= codIRange {
+		a.BinVal = 1
+		// Terminate CABAC decoding, last bit inserted into codIOffset is = 1
+		// this is now also the rbspStopOneBit
+		// TODO: How is this denoting termination?
+		return codIRange, codIOffset, a.BinVal
+	}
+	a.BinVal = 0
+	codIRange, codIOffset = a.RenormD(sliceData, codIRange, codIOffset)
+
+	return codIRange, codIOffset, a.BinVal
+}
+
+// 9.3.3.2.2 Renormalization process of ADecEngine
+// Returns codIRange, codIOffset
+func (a ArithmeticDecoding) RenormD(sliceData *SliceData, codIRange, codIOffset int) (int, int) {
+	if codIRange >= 256 {
+		return codIRange, codIOffset
+	}
+	codIRange = codIRange << uint(1)
+	codIOffset = codIOffset << uint(1)
+	codIOffset = codIOffset | sliceData.BitReader.ReadOneBit()
+	return a.RenormD(sliceData, codIRange, codIOffset)
+}
+
+type ArithmeticDecoding struct {
+	Context      *SliceContext
+	Binarization *Binarization
+	BinVal       int
+}
+
+// 9.3.3.2.1
+// returns: binVal, updated codIRange, updated codIOffset
+func (a ArithmeticDecoding) BinaryDecision(ctxIdx, codIRange, codIOffset int) (int, int, int) {
+	var binVal int
+	cabac := initCabac(a.Binarization, a.Context)
+	// Derivce codIRangeLPS
+	qCodIRangeIdx := (codIRange >> 6) & 3
+	pStateIdx := cabac.PStateIdx
+	codIRangeLPS := rangeTabLPS[pStateIdx][qCodIRangeIdx]
+
+	codIRange = codIRange - codIRangeLPS
+	if codIOffset >= codIRange {
+		binVal = 1 - cabac.ValMPS
+		codIOffset -= codIRange
+		codIRange = codIRangeLPS
+	} else {
+		binVal = cabac.ValMPS
+	}
+
+	// TODO: Do StateTransition and then RenormD happen here? See: 9.3.3.2.1
+	return binVal, codIRange, codIOffset
+}
+
+// 9.3.3.2.1.1
+// Returns: pStateIdx, valMPS
+func (c *CABAC) StateTransitionProcess(binVal int) {
+	if binVal == c.ValMPS {
+		c.PStateIdx = stateTransxTab[c.PStateIdx].TransIdxMPS
+	} else {
+		if c.PStateIdx == 0 {
+			c.ValMPS = 1 - c.ValMPS
+		}
+		c.PStateIdx = stateTransxTab[c.PStateIdx].TransIdxLPS
+	}
+}
+
+// 9.3.3.1
+// Returns ctxIdx
 func CtxIdx(binIdx, maxBinIdxCtx, ctxIdxOffset int) int {
 	ctxIdx := NaCtxId
 	// table 9-39

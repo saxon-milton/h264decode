@@ -7,6 +7,7 @@ A stream is read sequentially dropping each NAL into a struct with access to the
 * CABAC initialization
 * Context-adaptive arithmetic entropy-coded syntax element support
 * Macroblock to YCbCr image decoding
+
 ## Done
 
 * DecodeBypass, 9.3.3.2.3

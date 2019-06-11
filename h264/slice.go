@@ -122,14 +122,6 @@ func flagVal(b bool) int {
 	return 0
 }
 
-// context-adaptive arithmetic entropy-coded element (CABAC)
-// 9.3
-// When parsing the slice date of a slice (7.3.4) the initialization is 9.3.1
-func (d SliceData) ae(v int) int {
-	// 9.3.1.1 : CABAC context initialization ctxIdx
-	return 0
-}
-
 // 8.2.2
 func MbToSliceGroupMap(sps *SPS, pps *PPS, header *SliceHeader) []int {
 	mbaffFrameFlag := 0
@@ -264,7 +256,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 						sliceContext.Slice.Data)
 					binarization.Decode(sliceContext, b, rbsp)
 
-					cabac = initCabac(binarization, sliceContext)
+					cabac = initContextVariables("PrevIntra4x4PredModeFlag", binarization, sliceContext)
 					_ = cabac
 					logger.Printf("TODO: ae for PevIntra4x4PredModeFlag[%d]\n", luma4x4BlkIdx)
 				} else {
@@ -579,7 +571,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 		return false
 	}
 	// TODO: Why is this being initialized here?
-	// initCabac(sliceContext)
+	// initContextVariables(sliceContext)
 	if sliceContext.PPS.EntropyCodingMode == 1 {
 		for !b.IsByteAligned() {
 			sliceContext.Slice.Data.CabacAlignmentOneBit = b.NextField("CabacAlignmentOneBit", 1)
@@ -637,7 +629,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 			if sliceContext.PPS.EntropyCodingMode == 1 {
 				// TODO: ae implementation
 				binarization := NewBinarization("MbType", sliceContext.Slice.Data)
-				cabac = initCabac(binarization, sliceContext)
+				cabac = initContextVariables("MBType", binarization, sliceContext)
 				_ = cabac
 				binarization.Decode(sliceContext, b, b.Bytes())
 				if binarization.PrefixSuffix {
@@ -705,7 +697,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 						b.NextField(fmt.Sprintf("PcmSampleLuma[%d]", i), bitDepthY))
 				}
 				// 9.3.1 p 246
-				// cabac = initCabac(binarization, sliceContext)
+				// cabac = initContextVariables(binarization, sliceContext)
 				// 6-1 p 47
 				mbWidthC := 16 / SubWidthC(sliceContext.SPS)
 				mbHeightC := 16 / SubHeightC(sliceContext.SPS)
@@ -722,7 +714,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 						b.NextField(fmt.Sprintf("PcmSampleChroma[%d]", i), bitDepthC))
 				}
 				// 9.3.1 p 246
-				// cabac = initCabac(binarization, sliceContext)
+				// cabac = initContextVariables(binarization, sliceContext)
 
 			} else {
 				noSubMbPartSizeLessThan8x8Flag := 1
@@ -747,7 +739,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 						// If sliceContext.PPS.EntropyCodingMode == 1, use ae(v)
 						if sliceContext.PPS.EntropyCodingMode == 1 {
 							binarization := NewBinarization("TransformSize8x8Flag", sliceContext.Slice.Data)
-							cabac = initCabac(binarization, sliceContext)
+							cabac = initContextVariables("TransformSize8x8Flag", binarization, sliceContext)
 							binarization.Decode(sliceContext, b, b.Bytes())
 
 							logger.Println("TODO: ae(v) for TransformSize8x8Flag")
@@ -762,7 +754,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 					logger.Printf("TODO: CodedBlockPattern pending me/ae implementation\n")
 					if sliceContext.PPS.EntropyCodingMode == 1 {
 						binarization := NewBinarization("CodedBlockPattern", sliceContext.Slice.Data)
-						cabac = initCabac(binarization, sliceContext)
+						cabac = initContextVariables("CodedBlockPattern", binarization, sliceContext)
 						binarization.Decode(sliceContext, b, b.Bytes())
 
 						logger.Printf("TODO: ae for CodedBlockPattern\n")
@@ -778,7 +770,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 						// TODO: 1 bit or ae(v)
 						if sliceContext.PPS.EntropyCodingMode == 1 {
 							binarization := NewBinarization("Transform8x8Flag", sliceContext.Slice.Data)
-							cabac = initCabac(binarization, sliceContext)
+							cabac = initContextVariables("Transform8x8Flag", binarization, sliceContext)
 							binarization.Decode(sliceContext, b, b.Bytes())
 
 							logger.Printf("TODO: ae for TranformSize8x8Flag\n")
@@ -791,7 +783,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 					// TODO: se or ae(v)
 					if sliceContext.PPS.EntropyCodingMode == 1 {
 						binarization := NewBinarization("MbQpDelta", sliceContext.Slice.Data)
-						cabac = initCabac(binarization, sliceContext)
+						cabac = initContextVariables("MbQpDelta", binarization, sliceContext)
 						binarization.Decode(sliceContext, b, b.Bytes())
 
 						logger.Printf("TODO: ae for MbQpDelta\n")

@@ -101,6 +101,7 @@ func (bin *Binarization) Decode(sliceContext *SliceContext, b *BitReader, rbsp [
 	} else {
 		logger.Printf("TODO: no means to find binString for %s\n", bin.SyntaxElement)
 	}
+	logger.Printf("bin string of %s binarization: %#v\n", bin.SyntaxElement, bin.binString)
 }
 
 // 9.3.3.1.1 : returns ctxIdxInc
@@ -142,18 +143,26 @@ type CABAC struct {
 	PStateIdx int
 	ValMPS    int
 	Context   *SliceContext
+	SECount   int
 }
 
 // table 9-1
-func initCabac(binarization *Binarization, context *SliceContext) *CABAC {
+// 9.3.1.1: initialization of context variables
+func initContextVariables(se string, binarization *Binarization, context *SliceContext) *CABAC {
+	return initCabac(se, binarization, context)
+}
+
+// TODO: refactor to initContextVariables globally
+func initCabac(se string, binarization *Binarization, context *SliceContext) *CABAC {
+	logger.Printf("init context variables for SE: %s\n", se)
 	var valMPS, pStateIdx int
-	// TODO: When to use prefix, when to use suffix?
+	// TODO: When to use prefix, when to use suffix? See 9.3.2 on BinZ process
 	ctxIdx := CtxIdx(
 		binarization.binIdx,
 		binarization.MaxBinIdxCtx.Prefix,
 		binarization.CtxIdxOffset.Prefix)
 	mn := MNVars[ctxIdx]
-
+	logger.Printf("initialized ctxIdx to %v\n", ctxIdx)
 	preCtxState := PreCtxState(mn[0].M, mn[0].N, SliceQPy(context.PPS, context.Header))
 	if preCtxState <= 63 {
 		pStateIdx = 63 - preCtxState
@@ -337,6 +346,11 @@ type BinarizationType struct {
 }
 
 // 9.3.2.5
+func GetBinarization(syntaxElement string, data *SliceData) *Binarization {
+	return NewBinarization(syntaxElement, data)
+}
+
+// TODO: Rename to GetBinarization globally
 func NewBinarization(syntaxElement string, data *SliceData) *Binarization {
 	sliceTypeName := data.SliceTypeName
 	logger.Printf("debug: binarization of %s in sliceType %s\n", syntaxElement, sliceTypeName)
@@ -379,7 +393,7 @@ func NewBinarization(syntaxElement string, data *SliceData) *Binarization {
 		}
 		// 9.3.2.5
 	case "MbType":
-		logger.Printf("debug: \tMbType is %s\n", data.MbTypeName)
+		logger.Printf("debug: \tMbType %d is %s\n", data.MbType, data.MbTypeName)
 		switch sliceTypeName {
 		case "SI":
 			binarization.BinarizationType = BinarizationType{PrefixSuffix: true}
@@ -445,19 +459,17 @@ func initDecodingEngine(bitReader *BitReader) (int, int) {
 	return codIRange, codIOffset
 }
 
-// 9.3.3.2: output is value of the bin
+// 9.3.3.2: output is value of the bin (aka: DecodeBin)
 func NewArithmeticDecoding(context *SliceContext, binarization *Binarization, ctxIdx, codIRange, codIOffset int) ArithmeticDecoding {
 	a := ArithmeticDecoding{Context: context, Binarization: binarization}
 	logger.Printf("debug: decoding bypass %d, for ctx %d\n", binarization.UseDecodeBypass, ctxIdx)
 	// TODO: Implement
 	if binarization.UseDecodeBypass == 1 {
-		// TODO: 9.3.3.2.3 : DecodeBypass()
 		codIOffset, a.BinVal = a.DecodeBypass(context.Slice.Data, codIRange, codIOffset)
-
 	} else if binarization.UseDecodeBypass == 0 && ctxIdx == 276 {
-		// TODO: 9.3.3.2.4 : DecodeTerminate()
+		codIRange, codIOffset, a.BinVal = a.DecodeTerminate(context.Slice.Data, codIRange, codIOffset)
 	} else {
-		// TODO: 9.3.3.2.1 : DecodeDecision()
+		codIRange, codIOffset, a.BinVal = a.DecodeDecision(ctxIdx, codIRange, codIOffset)
 	}
 	a.BinVal = -1
 	return a
@@ -517,10 +529,12 @@ type ArithmeticDecoding struct {
 }
 
 // 9.3.3.2.1
-// returns: binVal, updated codIRange, updated codIOffset
-func (a ArithmeticDecoding) BinaryDecision(ctxIdx, codIRange, codIOffset int) (int, int, int) {
+// Note: Renamed from BinaryDecision as noted in issues
+// returns updated codIRange, updated codIOffset, binVal
+func (a ArithmeticDecoding) DecodeDecision(ctxIdx, codIRange, codIOffset int) (int, int, int) {
 	var binVal int
-	cabac := initCabac(a.Binarization, a.Context)
+	// TODO: Why a re-init?
+	cabac := initCabac("reinit", a.Binarization, a.Context)
 	// Derivce codIRangeLPS
 	qCodIRangeIdx := (codIRange >> 6) & 3
 	pStateIdx := cabac.PStateIdx
@@ -536,7 +550,8 @@ func (a ArithmeticDecoding) BinaryDecision(ctxIdx, codIRange, codIOffset int) (i
 	}
 
 	// TODO: Do StateTransition and then RenormD happen here? See: 9.3.3.2.1
-	return binVal, codIRange, codIOffset
+	// fig 9-3 decode decision flow
+	return codIRange, codIOffset, binVal
 }
 
 // 9.3.3.2.1.1
@@ -552,9 +567,23 @@ func (c *CABAC) StateTransitionProcess(binVal int) {
 	}
 }
 
+func (c *CABAC) ae(se string) int {
+	c.SECount += 1
+	return 0
+}
+
+// 9.3.3.1.1.3
+func CtxIdxIncMBType(mbTypeName string, ctxIdxOffset int) int {
+	// 6.4.11.1
+	// ctxIdxInc = condTermFlagA + condTermFlagB
+	return 0 // 0,1,2
+}
+
 // 9.3.3.1
 // Returns ctxIdx
 func CtxIdx(binIdx, maxBinIdxCtx, ctxIdxOffset int) int {
+	logger.Printf("deriving ctxIdx with binIdx: %d, maxBinIdxCtx: %d, ctxIdxOffset: %d",
+		binIdx, maxBinIdxCtx, ctxIdxOffset)
 	ctxIdx := NaCtxId
 	// table 9-39
 	switch ctxIdxOffset {

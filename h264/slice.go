@@ -767,10 +767,13 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 
 						logger.Printf("TODO: ae for CodedBlockPattern\n")
 					} else {
-						sliceContext.Slice.Data.CodedBlockPattern = me(
+						me, _ := readMe(
 							nil,
 							sliceContext.Slice.Header.ChromaArrayType,
-							MbPartPredMode(sliceContext.Slice.Data, sliceContext.Slice.Data.SliceTypeName, sliceContext.Slice.Data.MbType, 0))
+							// TODO: fix this
+							//MbPartPredMode(sliceContext.Slice.Data, sliceContext.Slice.Data.SliceTypeName, sliceContext.Slice.Data.MbType, 0)))
+							0)
+						sliceContext.Slice.Data.CodedBlockPattern = int(me)
 					}
 
 					// sliceContext.Slice.Data.CodedBlockPattern = me(v) | ae(v)

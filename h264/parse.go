@@ -93,3 +93,69 @@ func readSe(r bitio.Reader) (int, error) {
 
 	return int(math.Pow(-1, float64(codeNum+1)) * math.Ceil(float64(codeNum)/2.0)), nil
 }
+
+// readMe parses a syntax element of me(v) descriptor, i.e. mapped
+// Exp-Golomb-coded element, using methods described in sections 9.1 and 9.1.2
+// in Rec. ITU-T H.264 (04/2017).
+func readMe(r bitio.Reader, chromaArrayType int, mpm macroblockPredictionMode) (uint, error) {
+	// Indexes to codedBlockPattern map.
+	var i1, i2, i3 int
+
+	// ChromaArrayType selects first index.
+	switch chromaArrayType {
+	case 1, 2:
+		i1 = 0
+	case 0, 3:
+		i1 = 1
+	default:
+		return 0, errors.New("invalid chromaArrayType")
+	}
+
+	// CodeNum from readUe selects second index.
+	i2, err := readUe(r)
+	if err != nil {
+		return 0, errors.Wrap(err, "error from readUe")
+	}
+
+	// Macroblock prediction mode selects third index.
+	switch mpm {
+	case intra4x4, intra8x8:
+		i3 = 0
+	case inter:
+		i3 = 1
+	default:
+		return 0, errors.New("invalid macroblock prediction mode")
+	}
+
+	return codedBlockPattern[i1][i2][i3], nil
+}
+
+// TODO: this should probably go in a separate consts file like consts.go or something
+// like common.go.
+type macroblockPredictionMode uint8
+
+const (
+	intra4x4 macroblockPredictionMode = iota
+	intra8x8
+	inter
+)
+
+// codedBlockPattern contains data from table 9-4 in ITU-T H.264 (04/2017)
+// for mapping a chromaArrayType, codeNum and macroblock prediction mode to a
+// coded block pattern.
+var codedBlockPattern = [][][]uint{
+	// Table 9-4 (a) for ChromaArrayType = 1 or 2
+	{
+		{47, 0}, {31, 16}, {15, 1}, {0, 2}, {23, 4}, {27, 8}, {29, 32}, {30, 3},
+		{7, 5}, {11, 10}, {13, 12}, {14, 15}, {39, 47}, {43, 7}, {45, 11}, {46, 13},
+		{16, 14}, {3, 6}, {31, 9}, {10, 31}, {12, 35}, {19, 37}, {21, 42}, {26, 44},
+		{28, 33}, {35, 34}, {37, 36}, {42, 40}, {44, 39}, {1, 43}, {2, 45}, {4, 46},
+		{8, 17}, {17, 18}, {18, 20}, {20, 24}, {24, 19}, {6, 21}, {9, 26}, {22, 28},
+		{25, 23}, {32, 27}, {33, 29}, {34, 30}, {36, 22}, {40, 25}, {38, 38}, {41, 41},
+	},
+	// Table 9-4 (b) for ChromaArrayType = 0 or 3
+	{
+		{15, 0}, {0, 1}, {7, 2}, {11, 4}, {13, 8}, {14, 3}, {3, 5}, {5, 10}, {10, 12},
+		{12, 15}, {1, 7}, {2, 11}, {4, 13}, {8, 14}, {6, 6}, {9, 9},
+	},
+}

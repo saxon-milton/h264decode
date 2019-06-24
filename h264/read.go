@@ -5,8 +5,6 @@ import (
 	"io"
 	"math"
 	"os"
-
-	"github.com/mrmod/degolomb"
 )
 
 type BitReader struct {
@@ -49,6 +47,7 @@ func (h *H264Reader) Discard(cntBytes int) error {
 	return nil
 }
 
+// TODO: what does this do ?
 func bitVal(bits []int) int {
 	t := 0
 	for i, b := range bits {
@@ -285,30 +284,6 @@ func (b *BitReader) setOffset() {
 	b.bitOffset = b.bitsRead % 8
 }
 
-func (b *BitReader) golomb() []int {
-	zeros := -1
-	bit := 0
-	bits := []int{}
-	for bit != 1 {
-		zeros += 1
-		bit = degolomb.BitArray(b.bytes[b.byteOffset])[b.bitOffset]
-		b.bitsRead += 1
-		b.setOffset()
-		bits = append(bits, bit)
-	}
-	if zeros == 0 {
-		return bits
-	}
-	for i := 0; i < zeros; i++ {
-		bit = degolomb.BitArray(b.bytes[b.byteOffset])[b.bitOffset]
-		b.bitsRead += 1
-		b.setOffset()
-		bits = append(bits, bit)
-	}
-
-	return bits
-}
-
 // TODO: MoreRBSPData Section 7.2 p 62
 func (b *BitReader) MoreRBSPData() bool {
 	logger.Printf("moreRBSPData: %d [byteO: %d, bitO: %d]\n", len(b.bytes), b.byteOffset, b.bitOffset)
@@ -404,26 +379,7 @@ func (b *BitReader) ReadBytes(n int) ([]byte, error) {
 }
 
 func (b *BitReader) Read(buf []int) (int, error) {
-	if b.byteOffset > len(b.bytes) {
-		return 0, fmt.Errorf("EOF: %d > %d\n", b.byteOffset, len(b.bytes))
-	}
-	i := 0
-	for {
-		for _, bit := range degolomb.BitArray(b.bytes[b.byteOffset])[b.bitOffset:8] {
-			buf[i] = bit
-			i++
-			b.bitsRead += 1
-			b.setOffset()
-			if i >= len(buf) {
-				return len(buf), nil
-			}
-		}
-		if b.byteOffset > len(b.bytes) {
-			return len(buf), fmt.Errorf("EOF: %d > %d\n", b.byteOffset, len(b.bytes))
-		}
-
-	}
-	return len(buf), nil
+	return 0, nil
 
 }
 func (b *BitReader) NextField(name string, bits int) int {

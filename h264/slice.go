@@ -368,12 +368,12 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 					if MbaffFrameFlag(sliceContext.SPS, sliceContext.Slice.Header) == 0 || !sliceContext.Slice.Data.MbFieldDecodingFlag {
 						sliceContext.Slice.Data.RefIdxL0[mbPartIdx], _ = readTe(
 							nil,
-							sliceContext.Slice.Header.NumRefIdxL0ActiveMinus1)
+							uint(sliceContext.Slice.Header.NumRefIdxL0ActiveMinus1))
 					} else {
 						rangeMax := 2*sliceContext.Slice.Header.NumRefIdxL0ActiveMinus1 + 1
 						sliceContext.Slice.Data.RefIdxL0[mbPartIdx], _ = readTe(
 							nil,
-							rangeMax)
+							uint(rangeMax))
 					}
 				}
 			}

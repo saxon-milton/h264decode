@@ -61,7 +61,7 @@ func readUe(r bitio.Reader) (int, error) {
 // Rec. ITU-T H.264 (04/2017).
 //
 // TODO: this should also return uint.
-func readTe(r bitio.Reader, x int) (int, error) {
+func readTe(r bitio.Reader, x uint) (int, error) {
 	if x > 1 {
 		return readUe(r)
 	}
@@ -77,5 +77,7 @@ func readTe(r bitio.Reader, x int) (int, error) {
 		return 0, nil
 	}
 
-	return 0, errors.New("x must be more than or equal to 1")
+	return 0, errReadTeBadX
 }
+
+var errReadTeBadX = errors.New("x must be more than or equal to 1")

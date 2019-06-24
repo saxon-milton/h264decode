@@ -67,3 +67,31 @@ func TestReadUe(t *testing.T) {
 		}
 	}
 }
+
+// TestReadTe checks that readTe correctly parses a truncated Exp-Golomb-coded
+// syntax element. Expected results are outlined in section 9.1 pg209 Rec ITU-T
+// H.264 (04/2017)
+func TestReadTe(t *testing.T) {
+	tests := []struct {
+		in     []byte // The bitstring we will read.
+		x      uint   // The upper bound of the range.
+		expect uint   // Expected result from readTe.
+		err    error  // Expected error from readTe.
+	}{
+		{[]byte{0x30}, 1, 1, nil},
+		{[]byte{0x80}, 1, 0, nil},
+		{[]byte{0x30}, 5, 5, nil},
+		{[]byte{0x30}, 0, 0, errReadTeBadX},
+	}
+
+	for testn, test := range tests {
+		got, err := readTe(bitio.NewReader(bytes.NewReader(test.in)), test.x)
+		if err != test.err {
+			t.Fatalf("did not get expected error for test: %v\nGot: %v\nWant: %v\n", testn, err, test.err)
+		}
+
+		if test.expect != uint(got) {
+			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.expect)
+		}
+	}
+}

@@ -174,7 +174,7 @@ func scalingList(b *BitReader, scalingList []int, sizeOfScalingList int, default
 	nextScale := 8
 	for i := 0; i < sizeOfScalingList; i++ {
 		if nextScale != 0 {
-			deltaScale := se(nil)
+			deltaScale, _ := readSe(nil)
 			nextScale = (lastScale + deltaScale + 256) % 256
 			if i == 0 && nextScale == 0 {
 				// Scaling list should use the default list for this point in the matrix
@@ -298,14 +298,15 @@ func NewSPS(rbsp []byte, showPacket bool) *SPS {
 		} else {
 			sps.DeltaPicOrderAlwaysZero = false
 		}
-		sps.OffsetForNonRefPic = se(nil)
-		sps.OffsetForTopToBottomField = se(nil)
+		sps.OffsetForNonRefPic, _ = readSe(nil)
+		sps.OffsetForTopToBottomField, _ = readSe(nil)
 		sps.NumRefFramesInPicOrderCntCycle, _ = readUe(nil)
 
 		for i := 0; i < sps.NumRefFramesInPicOrderCntCycle; i++ {
+			se, _ := readSe(nil)
 			sps.OffsetForRefFrameList = append(
 				sps.OffsetForRefFrameList,
-				se(nil))
+				se)
 		}
 
 	}

@@ -81,3 +81,15 @@ func readTe(r bitio.Reader, x uint) (int, error) {
 }
 
 var errReadTeBadX = errors.New("x must be more than or equal to 1")
+
+// readSe parses a syntax element with descriptor se(v), i.e. a signed integer
+// Exp-Golomb-coded syntax element, using the method described in sections
+// 9.1 and 9.1.1 in Rec. ITU-T H.264 (04/2017).
+func readSe(r bitio.Reader) (int, error) {
+	codeNum, err := readUe(r)
+	if err != nil {
+		return 0, errors.Wrap(err, "error reading ue(v)")
+	}
+
+	return int(math.Pow(-1, float64(codeNum+1)) * math.Ceil(float64(codeNum)/2.0)), nil
+}

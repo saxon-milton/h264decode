@@ -408,7 +408,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 						}
 						logger.Printf("TODO: ae for MvdL0[%d][0][%d]\n", mbPartIdx, compIdx)
 					} else {
-						sliceContext.Slice.Data.MvdL0[mbPartIdx][0][compIdx] = se(nil)
+						sliceContext.Slice.Data.MvdL0[mbPartIdx][0][compIdx], _ = readSe(nil)
 					}
 				}
 			}
@@ -444,7 +444,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 						// TODO: se(v) or ae(v)
 						logger.Printf("TODO: ae for MvdL1[%d][0][%d]\n", mbPartIdx, compIdx)
 					} else {
-						sliceContext.Slice.Data.MvdL1[mbPartIdx][0][compIdx] = se(nil)
+						sliceContext.Slice.Data.MvdL1[mbPartIdx][0][compIdx], _ = readSe(nil)
 					}
 				}
 			}
@@ -796,7 +796,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 
 						logger.Printf("TODO: ae for MbQpDelta\n")
 					} else {
-						sliceContext.Slice.Data.MbQpDelta = se(nil)
+						sliceContext.Slice.Data.MbQpDelta, _ = readSe(nil)
 					}
 
 				}
@@ -876,13 +876,13 @@ func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, sh
 	if sps.PicOrderCountType == 0 {
 		header.PicOrderCntLsb = b.NextField("PicOrderCntLsb", sps.Log2MaxPicOrderCntLSBMin4+4)
 		if pps.BottomFieldPicOrderInFramePresent && !header.FieldPic {
-			header.DeltaPicOrderCntBottom = se(nil)
+			header.DeltaPicOrderCntBottom, _ = readSe(nil)
 		}
 	}
 	if sps.PicOrderCountType == 1 && !sps.DeltaPicOrderAlwaysZero {
-		header.DeltaPicOrderCnt[0] = se(nil)
+		header.DeltaPicOrderCnt[0], _ = readSe(nil)
 		if pps.BottomFieldPicOrderInFramePresent && !header.FieldPic {
-			header.DeltaPicOrderCnt[1] = se(nil)
+			header.DeltaPicOrderCnt[1], _ = readSe(nil)
 		}
 	}
 	if pps.RedundantPicCntPresent {
@@ -946,8 +946,10 @@ func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, sh
 		for i := 0; i <= header.NumRefIdxL0ActiveMinus1; i++ {
 			header.LumaWeightL0Flag = flagField()
 			if header.LumaWeightL0Flag {
-				header.LumaWeightL0 = append(header.LumaWeightL0, se(nil))
-				header.LumaOffsetL0 = append(header.LumaOffsetL0, se(nil))
+				se, _ := readSe(nil)
+				header.LumaWeightL0 = append(header.LumaWeightL0, se)
+				se, _ = readSe(nil)
+				header.LumaOffsetL0 = append(header.LumaOffsetL0, se)
 			}
 			if header.ChromaArrayType != 0 {
 				header.ChromaWeightL0Flag = flagField()
@@ -955,8 +957,10 @@ func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, sh
 					header.ChromaWeightL0 = append(header.ChromaWeightL0, []int{})
 					header.ChromaOffsetL0 = append(header.ChromaOffsetL0, []int{})
 					for j := 0; j < 2; j++ {
-						header.ChromaWeightL0[i] = append(header.ChromaWeightL0[i], se(nil))
-						header.ChromaOffsetL0[i] = append(header.ChromaOffsetL0[i], se(nil))
+						se, _ := readSe(nil)
+						header.ChromaWeightL0[i] = append(header.ChromaWeightL0[i], se)
+						se, _ = readSe(nil)
+						header.ChromaOffsetL0[i] = append(header.ChromaOffsetL0[i], se)
 					}
 				}
 			}
@@ -965,8 +969,10 @@ func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, sh
 			for i := 0; i <= header.NumRefIdxL1ActiveMinus1; i++ {
 				header.LumaWeightL1Flag = flagField()
 				if header.LumaWeightL1Flag {
-					header.LumaWeightL1 = append(header.LumaWeightL1, se(nil))
-					header.LumaOffsetL1 = append(header.LumaOffsetL1, se(nil))
+					se, _ := readSe(nil)
+					header.LumaWeightL1 = append(header.LumaWeightL1, se)
+					se, _ = readSe(nil)
+					header.LumaOffsetL1 = append(header.LumaOffsetL1, se)
 				}
 				if header.ChromaArrayType != 0 {
 					header.ChromaWeightL1Flag = flagField()
@@ -974,8 +980,10 @@ func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, sh
 						header.ChromaWeightL1 = append(header.ChromaWeightL1, []int{})
 						header.ChromaOffsetL1 = append(header.ChromaOffsetL1, []int{})
 						for j := 0; j < 2; j++ {
-							header.ChromaWeightL1[i] = append(header.ChromaWeightL1[i], se(nil))
-							header.ChromaOffsetL1[i] = append(header.ChromaOffsetL1[i], se(nil))
+							se, _ := readSe(nil)
+							header.ChromaWeightL1[i] = append(header.ChromaWeightL1[i], se)
+							se, _ = readSe(nil)
+							header.ChromaOffsetL1[i] = append(header.ChromaOffsetL1[i], se)
 						}
 					}
 				}
@@ -1011,18 +1019,18 @@ func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, sh
 	if pps.EntropyCodingMode == 1 && sliceType != "I" && sliceType != "SI" {
 		header.CabacInit, _ = readUe(nil)
 	}
-	header.SliceQpDelta = se(nil)
+	header.SliceQpDelta, _ = readSe(nil)
 	if sliceType == "SP" || sliceType == "SI" {
 		if sliceType == "SP" {
 			header.SpForSwitch = flagField()
 		}
-		header.SliceQsDelta = se(nil)
+		header.SliceQsDelta, _ = readSe(nil)
 	}
 	if pps.DeblockingFilterControlPresent {
 		header.DisableDeblockingFilter, _ = readUe(nil)
 		if header.DisableDeblockingFilter != 1 {
-			header.SliceAlphaC0OffsetDiv2 = se(nil)
-			header.SliceBetaOffsetDiv2 = se(nil)
+			header.SliceAlphaC0OffsetDiv2, _ = readSe(nil)
+			header.SliceBetaOffsetDiv2, _ = readSe(nil)
 		}
 	}
 	if pps.NumSliceGroupsMinus1 > 0 && pps.SliceGroupMapType >= 3 && pps.SliceGroupMapType <= 5 {

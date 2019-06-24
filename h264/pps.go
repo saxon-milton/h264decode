@@ -82,9 +82,9 @@ func NewPPS(sps *SPS, rbsp []byte, showPacket bool) *PPS {
 	pps.NumRefIdxL1DefaultActiveMinus1, _ = readUe(nil)
 	pps.WeightedPred = flagField()
 	pps.WeightedBipred = b.NextField("WeightedBipredIDC", 2)
-	pps.PicInitQpMinus26 = se(nil)
-	pps.PicInitQsMinus26 = se(nil)
-	pps.ChromaQpIndexOffset = se(nil)
+	pps.PicInitQpMinus26, _ = readSe(nil)
+	pps.PicInitQsMinus26, _ = readSe(nil)
+	pps.ChromaQpIndexOffset, _ = readSe(nil)
 	pps.DeblockingFilterControlPresent = flagField()
 	pps.ConstrainedIntraPred = flagField()
 	pps.RedundantPicCntPresent = flagField()
@@ -119,7 +119,7 @@ func NewPPS(sps *SPS, rbsp []byte, showPacket bool) *PPS {
 					}
 				}
 			}
-			pps.SecondChromaQpIndexOffset = se(nil)
+			pps.SecondChromaQpIndexOffset, _ = readSe(nil)
 		}
 		b.MoreRBSPData()
 		// rbspTrailingBits()

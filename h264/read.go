@@ -3,7 +3,6 @@ package h264
 import (
 	"fmt"
 	"io"
-	"math"
 	"os"
 )
 
@@ -251,11 +250,6 @@ func me(bits []int, chromaArrayType int, macroBlockPredMode string) int {
 	return meChroma0or3[codeNum][macroBlockPredMode]
 }
 
-// 9.1.1 Table 9-3
-func se(bits []int) int {
-	codeNum := bitVal(bits) - 1
-	return int(math.Pow(float64(-1), float64(codeNum+1)) * math.Ceil(float64(codeNum/2)))
-}
 func (b *BitReader) Bytes() []byte {
 	return b.bytes
 }

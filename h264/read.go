@@ -171,11 +171,6 @@ func isEmpty3Byte(buf []byte) bool {
 	return true
 }
 
-// 9.1 Table 9-2
-func ue(bits []int) int {
-	return bitVal(bits) - 1
-}
-
 // {codeNum: {codedBlockPattern: v}}
 var meChroma1or2 = map[int]map[string]int{
 	0:  map[string]int{"Intra_4x4": 47, "Intra_8x8": 47, "Inter": 0},
@@ -254,17 +249,6 @@ func me(bits []int, chromaArrayType int, macroBlockPredMode string) int {
 		return meChroma1or2[codeNum][macroBlockPredMode]
 	}
 	return meChroma0or3[codeNum][macroBlockPredMode]
-}
-
-// truncated exp-golomb encoded
-func te(bits []int, rangeMax int) int {
-	if rangeMax > 1 {
-		return ue(bits)
-	}
-	if bits[0] == 0 {
-		return 1
-	}
-	return 0
 }
 
 // 9.1.1 Table 9-3

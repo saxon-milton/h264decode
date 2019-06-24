@@ -62,7 +62,7 @@ func TestReadUe(t *testing.T) {
 			t.Fatalf("did not expect to get error: %v from readUe", err)
 		}
 
-		if test.expect != got {
+		if test.expect != uint(got) {
 			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.expect)
 		}
 	}

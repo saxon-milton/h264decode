@@ -195,13 +195,15 @@ func NewSPS(rbsp []byte, showPacket bool) *SPS {
 	sps := SPS{}
 	b := &BitReader{bytes: rbsp}
 	hrdParameters := func() {
-		sps.CpbCntMinus1 = ue(nil)
+		sps.CpbCntMinus1, _ = readUe(nil)
 		sps.BitRateScale = b.NextField("BitRateScale", 4)
 		sps.CpbSizeScale = b.NextField("CPBSizeScale", 4)
 		// SchedSelIdx E1.2
 		for sseli := 0; sseli <= sps.CpbCntMinus1; sseli++ {
-			sps.BitRateValueMinus1 = append(sps.BitRateValueMinus1, ue(nil))
-			sps.CpbSizeValueMinus1 = append(sps.CpbSizeValueMinus1, ue(nil))
+			ue, _ := readUe(nil)
+			sps.BitRateValueMinus1 = append(sps.BitRateValueMinus1, ue)
+			ue, _ = readUe(nil)
+			sps.CpbSizeValueMinus1 = append(sps.CpbSizeValueMinus1, ue)
 			if v := b.NextField(fmt.Sprintf("CBR[%d]", sseli), 1); v == 1 {
 				sps.Cbr = append(sps.Cbr, true)
 			} else {
@@ -224,8 +226,8 @@ func NewSPS(rbsp []byte, showPacket bool) *SPS {
 	_ = b.NextField("ReservedZeroBits", 2)
 	sps.Level = b.NextField("LevelIDC", 8)
 	// sps.ID = b.NextField("SPSID", 6) // proper
-	sps.ID = ue(nil)
-	sps.ChromaFormat = ue(nil)
+	sps.ID, _ = readUe(nil)
+	sps.ChromaFormat, _ = readUe(nil)
 	// This should be done only for certain ProfileIDC:
 	isProfileIDC := []int{100, 110, 122, 244, 44, 83, 86, 118, 128, 138, 139, 134, 135}
 	// SpecialProfileCase1
@@ -238,8 +240,8 @@ func NewSPS(rbsp []byte, showPacket bool) *SPS {
 			}
 		}
 
-		sps.BitDepthLumaMinus8 = ue(nil)
-		sps.BitDepthChromaMinus8 = ue(nil)
+		sps.BitDepthLumaMinus8, _ = readUe(nil)
+		sps.BitDepthChromaMinus8, _ = readUe(nil)
 		if v := b.NextField("QPrimeYZeroTransformBypassFlag", 1); v == 1 {
 			sps.QPrimeYZeroTransformBypass = true
 		} else {
@@ -286,10 +288,10 @@ func NewSPS(rbsp []byte, showPacket bool) *SPS {
 	// showSPS()
 	// return sps
 	// Possibly wrong due to no scaling list being built
-	sps.Log2MaxFrameNumMinus4 = ue(nil)
-	sps.PicOrderCountType = ue(nil)
+	sps.Log2MaxFrameNumMinus4, _ = readUe(nil)
+	sps.PicOrderCountType, _ = readUe(nil)
 	if sps.PicOrderCountType == 0 {
-		sps.Log2MaxPicOrderCntLSBMin4 = ue(nil)
+		sps.Log2MaxPicOrderCntLSBMin4, _ = readUe(nil)
 	} else if sps.PicOrderCountType == 1 {
 		if v := b.NextField("DeltaPicOrderAlwaysZeroFlag", 1); v == 1 {
 			sps.DeltaPicOrderAlwaysZero = true
@@ -298,7 +300,7 @@ func NewSPS(rbsp []byte, showPacket bool) *SPS {
 		}
 		sps.OffsetForNonRefPic = se(nil)
 		sps.OffsetForTopToBottomField = se(nil)
-		sps.NumRefFramesInPicOrderCntCycle = ue(nil)
+		sps.NumRefFramesInPicOrderCntCycle, _ = readUe(nil)
 
 		for i := 0; i < sps.NumRefFramesInPicOrderCntCycle; i++ {
 			sps.OffsetForRefFrameList = append(
@@ -307,12 +309,12 @@ func NewSPS(rbsp []byte, showPacket bool) *SPS {
 		}
 
 	}
-	sps.MaxNumRefFrames = ue(nil)
+	sps.MaxNumRefFrames, _ = readUe(nil)
 	if v := b.NextField("GapsInFrameNumValueAllowedFlag", 1); v == 1 {
 		sps.GapsInFrameNumValueAllowed = true
 	}
-	sps.PicWidthInMbsMinus1 = ue(nil)
-	sps.PicHeightInMapUnitsMinus1 = ue(nil)
+	sps.PicWidthInMbsMinus1, _ = readUe(nil)
+	sps.PicHeightInMapUnitsMinus1, _ = readUe(nil)
 	if v := b.NextField("FrameMbsOnlyFlag", 1); v == 1 {
 		sps.FrameMbsOnly = true
 	}
@@ -328,10 +330,10 @@ func NewSPS(rbsp []byte, showPacket bool) *SPS {
 		sps.FrameCropping = true
 	}
 	if sps.FrameCropping {
-		sps.FrameCropLeftOffset = ue(nil)
-		sps.FrameCropRightOffset = ue(nil)
-		sps.FrameCropTopOffset = ue(nil)
-		sps.FrameCropBottomOffset = ue(nil)
+		sps.FrameCropLeftOffset, _ = readUe(nil)
+		sps.FrameCropRightOffset, _ = readUe(nil)
+		sps.FrameCropTopOffset, _ = readUe(nil)
+		sps.FrameCropBottomOffset, _ = readUe(nil)
 	}
 	if v := b.NextField("VUIParametersPresentFlag", 1); v == 1 {
 		sps.VuiParametersPresent = true
@@ -380,8 +382,8 @@ func NewSPS(rbsp []byte, showPacket bool) *SPS {
 			sps.ChromaLocInfoPresent = true
 		}
 		if sps.ChromaLocInfoPresent {
-			sps.ChromaSampleLocTypeTopField = ue(nil)
-			sps.ChromaSampleLocTypeBottomField = ue(nil)
+			sps.ChromaSampleLocTypeTopField, _ = readUe(nil)
+			sps.ChromaSampleLocTypeBottomField, _ = readUe(nil)
 		}
 
 		if v := b.NextField("TimingInfoPresentFlag", 1); v == 1 {
@@ -421,12 +423,12 @@ func NewSPS(rbsp []byte, showPacket bool) *SPS {
 			if v := b.NextField("MotionVectorsOverPicBoundaries", 1); v == 1 {
 				sps.MotionVectorsOverPicBoundaries = true
 			}
-			sps.MaxBytesPerPicDenom = ue(nil)
-			sps.MaxBitsPerMbDenom = ue(nil)
-			sps.Log2MaxMvLengthHorizontal = ue(nil)
-			sps.Log2MaxMvLengthVertical = ue(nil)
-			sps.MaxNumReorderFrames = ue(nil)
-			sps.MaxDecFrameBuffering = ue(nil)
+			sps.MaxBytesPerPicDenom, _ = readUe(nil)
+			sps.MaxBitsPerMbDenom, _ = readUe(nil)
+			sps.Log2MaxMvLengthHorizontal, _ = readUe(nil)
+			sps.Log2MaxMvLengthVertical, _ = readUe(nil)
+			sps.MaxNumReorderFrames, _ = readUe(nil)
+			sps.MaxDecFrameBuffering, _ = readUe(nil)
 		}
 
 	} // End VuiParameters Annex E.1.1

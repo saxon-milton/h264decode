@@ -341,7 +341,7 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 
 				logger.Printf("TODO: ae for IntraChromaPredMode\n")
 			} else {
-				sliceContext.Slice.Data.IntraChromaPredMode = ue(nil)
+				sliceContext.Slice.Data.IntraChromaPredMode, _ = readUe(nil)
 			}
 		}
 
@@ -366,12 +366,12 @@ func MbPred(sliceContext *SliceContext, b *BitReader, rbsp []byte) {
 					// TODO: Only one reference picture is used for inter-prediction,
 					// then the value should be 0
 					if MbaffFrameFlag(sliceContext.SPS, sliceContext.Slice.Header) == 0 || !sliceContext.Slice.Data.MbFieldDecodingFlag {
-						sliceContext.Slice.Data.RefIdxL0[mbPartIdx] = te(
+						sliceContext.Slice.Data.RefIdxL0[mbPartIdx], _ = readTe(
 							nil,
 							sliceContext.Slice.Header.NumRefIdxL0ActiveMinus1)
 					} else {
 						rangeMax := 2*sliceContext.Slice.Header.NumRefIdxL0ActiveMinus1 + 1
-						sliceContext.Slice.Data.RefIdxL0[mbPartIdx] = te(
+						sliceContext.Slice.Data.RefIdxL0[mbPartIdx], _ = readTe(
 							nil,
 							rangeMax)
 					}
@@ -601,7 +601,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 		if sliceContext.Slice.Data.SliceTypeName != "I" && sliceContext.Slice.Data.SliceTypeName != "SI" {
 			logger.Printf("debug: \tNonI/SI slice, processing moreData\n")
 			if sliceContext.PPS.EntropyCodingMode == 0 {
-				sliceContext.Slice.Data.MbSkipRun = ue(nil)
+				sliceContext.Slice.Data.MbSkipRun, _ = readUe(nil)
 				if sliceContext.Slice.Data.MbSkipRun > 0 {
 					prevMbSkipped = 1
 				}
@@ -691,7 +691,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 
 				logger.Printf("TODO: ae for MBType\n")
 			} else {
-				sliceContext.Slice.Data.MbType = ue(nil)
+				sliceContext.Slice.Data.MbType, _ = readUe(nil)
 			}
 			if sliceContext.Slice.Data.MbTypeName == "I_PCM" {
 				for !b.IsByteAligned() {
@@ -854,11 +854,11 @@ func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, sh
 		}
 		return false
 	}
-	header.FirstMbInSlice = ue(nil)
-	header.SliceType = ue(nil)
+	header.FirstMbInSlice, _ = readUe(nil)
+	header.SliceType, _ = readUe(nil)
 	sliceType := sliceTypeMap[header.SliceType]
 	logger.Printf("debug: %s (%s) slice of %d bytes\n", NALUnitType[nalUnit.Type], sliceType, len(rbsp))
-	header.PPSID = ue(nil)
+	header.PPSID, _ = readUe(nil)
 	if sps.UseSeparateColorPlane {
 		header.ColorPlaneID = b.NextField("ColorPlaneID", 2)
 	}
@@ -871,7 +871,7 @@ func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, sh
 		}
 	}
 	if idrPic {
-		header.IDRPicID = ue(nil)
+		header.IDRPicID, _ = readUe(nil)
 	}
 	if sps.PicOrderCountType == 0 {
 		header.PicOrderCntLsb = b.NextField("PicOrderCntLsb", sps.Log2MaxPicOrderCntLSBMin4+4)
@@ -886,7 +886,7 @@ func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, sh
 		}
 	}
 	if pps.RedundantPicCntPresent {
-		header.RedundantPicCnt = ue(nil)
+		header.RedundantPicCnt, _ = readUe(nil)
 	}
 	if sliceType == "B" {
 		header.DirectSpatialMvPred = flagField()
@@ -894,9 +894,9 @@ func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, sh
 	if sliceType == "B" || sliceType == "SP" {
 		header.NumRefIdxActiveOverride = flagField()
 		if header.NumRefIdxActiveOverride {
-			header.NumRefIdxL0ActiveMinus1 = ue(nil)
+			header.NumRefIdxL0ActiveMinus1, _ = readUe(nil)
 			if sliceType == "B" {
-				header.NumRefIdxL1ActiveMinus1 = ue(nil)
+				header.NumRefIdxL1ActiveMinus1, _ = readUe(nil)
 			}
 		}
 	}
@@ -911,11 +911,11 @@ func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, sh
 			header.RefPicListModificationFlagL0 = flagField()
 			if header.RefPicListModificationFlagL0 {
 				for header.ModificationOfPicNums != 3 {
-					header.ModificationOfPicNums = ue(nil)
+					header.ModificationOfPicNums, _ = readUe(nil)
 					if header.ModificationOfPicNums == 0 || header.ModificationOfPicNums == 1 {
-						header.AbsDiffPicNumMinus1 = ue(nil)
+						header.AbsDiffPicNumMinus1, _ = readUe(nil)
 					} else if header.ModificationOfPicNums == 2 {
-						header.LongTermPicNum = ue(nil)
+						header.LongTermPicNum, _ = readUe(nil)
 					}
 				}
 			}
@@ -925,11 +925,11 @@ func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, sh
 			header.RefPicListModificationFlagL1 = flagField()
 			if header.RefPicListModificationFlagL1 {
 				for header.ModificationOfPicNums != 3 {
-					header.ModificationOfPicNums = ue(nil)
+					header.ModificationOfPicNums, _ = readUe(nil)
 					if header.ModificationOfPicNums == 0 || header.ModificationOfPicNums == 1 {
-						header.AbsDiffPicNumMinus1 = ue(nil)
+						header.AbsDiffPicNumMinus1, _ = readUe(nil)
 					} else if header.ModificationOfPicNums == 2 {
-						header.LongTermPicNum = ue(nil)
+						header.LongTermPicNum, _ = readUe(nil)
 					}
 				}
 			}
@@ -939,9 +939,9 @@ func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, sh
 
 	if (pps.WeightedPred && (sliceType == "P" || sliceType == "SP")) || (pps.WeightedBipred == 1 && sliceType == "B") {
 		// predWeightTable()
-		header.LumaLog2WeightDenom = ue(nil)
+		header.LumaLog2WeightDenom, _ = readUe(nil)
 		if header.ChromaArrayType != 0 {
-			header.ChromaLog2WeightDenom = ue(nil)
+			header.ChromaLog2WeightDenom, _ = readUe(nil)
 		}
 		for i := 0; i <= header.NumRefIdxL0ActiveMinus1; i++ {
 			header.LumaWeightL0Flag = flagField()
@@ -990,26 +990,26 @@ func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, sh
 		} else {
 			header.AdaptiveRefPicMarkingModeFlag = flagField()
 			if header.AdaptiveRefPicMarkingModeFlag {
-				header.MemoryManagementControlOperation = ue(nil)
+				header.MemoryManagementControlOperation, _ = readUe(nil)
 				for header.MemoryManagementControlOperation != 0 {
 					if header.MemoryManagementControlOperation == 1 || header.MemoryManagementControlOperation == 3 {
-						header.DifferenceOfPicNumsMinus1 = ue(nil)
+						header.DifferenceOfPicNumsMinus1, _ = readUe(nil)
 					}
 					if header.MemoryManagementControlOperation == 2 {
-						header.LongTermPicNum = ue(nil)
+						header.LongTermPicNum, _ = readUe(nil)
 					}
 					if header.MemoryManagementControlOperation == 3 || header.MemoryManagementControlOperation == 6 {
-						header.LongTermFrameIdx = ue(nil)
+						header.LongTermFrameIdx, _ = readUe(nil)
 					}
 					if header.MemoryManagementControlOperation == 4 {
-						header.MaxLongTermFrameIdxPlus1 = ue(nil)
+						header.MaxLongTermFrameIdxPlus1, _ = readUe(nil)
 					}
 				}
 			}
 		} // end decRefPicMarking
 	}
 	if pps.EntropyCodingMode == 1 && sliceType != "I" && sliceType != "SI" {
-		header.CabacInit = ue(nil)
+		header.CabacInit, _ = readUe(nil)
 	}
 	header.SliceQpDelta = se(nil)
 	if sliceType == "SP" || sliceType == "SI" {
@@ -1019,7 +1019,7 @@ func NewSliceContext(videoStream *VideoStream, nalUnit *NalUnit, rbsp []byte, sh
 		header.SliceQsDelta = se(nil)
 	}
 	if pps.DeblockingFilterControlPresent {
-		header.DisableDeblockingFilter = ue(nil)
+		header.DisableDeblockingFilter, _ = readUe(nil)
 		if header.DisableDeblockingFilter != 1 {
 			header.SliceAlphaC0OffsetDiv2 = se(nil)
 			header.SliceBetaOffsetDiv2 = se(nil)

@@ -32,13 +32,15 @@ import (
 	"math"
 
 	"github.com/icza/bitio"
+	"github.com/pkg/errors"
 )
 
 // readUe parses a syntax element of ue(v) descriptor, i.e. an unsigned integer
-// Exp-Golomb-coded element.
+// Exp-Golomb-coded element using method as specified in section 9.1 of ITU-T H.264.
 //
-// Specified in 9.1 of ITU-T H.264.
-func readUe(r bitio.Reader) (uint, error) {
+// TODO: this should return uint, but rest of code needs to be changed for this
+// to happen.
+func readUe(r bitio.Reader) (int, error) {
 	nZeros := -1
 	var err error
 	for b := uint64(0); b == 0; nZeros++ {
@@ -51,5 +53,29 @@ func readUe(r bitio.Reader) (uint, error) {
 	if err != nil {
 		return 0, err
 	}
-	return uint(math.Pow(float64(2), float64(nZeros)) - 1 + float64(rem)), nil
+	return int(math.Pow(float64(2), float64(nZeros)) - 1 + float64(rem)), nil
+}
+
+// readTe parses a syntax element of te(v) descriptor i.e, truncated
+// Exp-Golomb-coded syntax element using method as specified in section 9.1
+// Rec. ITU-T H.264 (04/2017).
+//
+// TODO: this should also return uint.
+func readTe(r bitio.Reader, x int) (int, error) {
+	if x > 1 {
+		return readUe(r)
+	}
+
+	if x == 1 {
+		b, err := r.ReadBits(1)
+		if err != nil {
+			return 0, errors.Wrap(err, "could not read bit")
+		}
+		if b == 0 {
+			return 1, nil
+		}
+		return 0, nil
+	}
+
+	return 0, errors.New("x must be more than or equal to 1")
 }

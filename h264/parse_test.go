@@ -95,3 +95,33 @@ func TestReadTe(t *testing.T) {
 		}
 	}
 }
+
+// TestReadSe checks that readSe correctly parses an se(v) signed integer
+// Exp-Golomb-coded syntax element. Expected behaviour is found in section 9.1
+// and 9.1.1 of the Rec. ITU-T H.264(04/2017).
+func TestReadSe(t *testing.T) {
+	// tests has been derived from table 9-3 of the specifications.
+	tests := []struct {
+		in     []byte // Bitstring to read.
+		expect int    // Expected value from se(v) parsing process.
+	}{
+		{[]byte{0x80}, 0},
+		{[]byte{0x40}, 1},
+		{[]byte{0x60}, -1},
+		{[]byte{0x20}, 2},
+		{[]byte{0x28}, -2},
+		{[]byte{0x30}, 3},
+		{[]byte{0x38}, -3},
+	}
+
+	for testn, test := range tests {
+		got, err := readSe(bitio.NewReader(bytes.NewReader(test.in)))
+		if err != nil {
+			t.Fatalf("did not expect to get error: %v from readSe", err)
+		}
+
+		if test.expect != got {
+			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.expect)
+		}
+	}
+}

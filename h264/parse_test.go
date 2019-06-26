@@ -125,3 +125,46 @@ func TestReadSe(t *testing.T) {
 		}
 	}
 }
+
+// TestReadMe checks that readMe correctly parses a me(v) mapped
+// Exp-Golomb-coded element. Expected behaviour is described in  in sections 9.1
+// and 9.1.2 in Rec. ITU-T H.264 (04/2017).
+func TestReadMe(t *testing.T) {
+	in := []byte{0x38}          // Bit string: 00111, codeNum: 6.
+	inErr := []byte{0x07, 0xe0} // Bit string: 0000 0111 111, codeNum: 62 (will give invalid codeNum err)
+
+	tests := []struct {
+		in     []byte // Input data.
+		cat    uint   // Chroma array..
+		mpm    macroblockPredictionMode
+		expect uint  // Expected result from readMe.
+		err    error // Expected value of err from readMe.
+	}{
+		{in, 1, intra4x4, 29, nil},
+		{in, 1, intra8x8, 29, nil},
+		{in, 1, inter, 32, nil},
+		{in, 2, intra4x4, 29, nil},
+		{in, 2, intra8x8, 29, nil},
+		{in, 2, inter, 32, nil},
+		{in, 0, intra4x4, 3, nil},
+		{in, 0, intra8x8, 3, nil},
+		{in, 0, inter, 5, nil},
+		{in, 3, intra4x4, 3, nil},
+		{in, 3, intra8x8, 3, nil},
+		{in, 3, inter, 5, nil},
+		{inErr, 1, intra4x4, 0, errInvalidCodeNum},
+		{in, 4, intra4x4, 0, errInvalidCAT},
+		{in, 0, 4, 0, errInvalidMPM},
+	}
+
+	for testn, test := range tests {
+		got, err := readMe(bitio.NewReader(bytes.NewReader(test.in)), test.cat, test.mpm)
+		if err != test.err {
+			t.Fatalf("did not expect to get error: %v for test: %v", err, testn)
+		}
+
+		if test.expect != got {
+			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.expect)
+		}
+	}
+}

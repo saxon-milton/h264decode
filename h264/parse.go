@@ -97,7 +97,7 @@ func readSe(r bitio.Reader) (int, error) {
 // readMe parses a syntax element of me(v) descriptor, i.e. mapped
 // Exp-Golomb-coded element, using methods described in sections 9.1 and 9.1.2
 // in Rec. ITU-T H.264 (04/2017).
-func readMe(r bitio.Reader, chromaArrayType int, mpm macroblockPredictionMode) (uint, error) {
+func readMe(r bitio.Reader, chromaArrayType uint, mpm macroblockPredictionMode) (uint, error) {
 	// Indexes to codedBlockPattern map.
 	var i1, i2, i3 int
 
@@ -108,13 +108,18 @@ func readMe(r bitio.Reader, chromaArrayType int, mpm macroblockPredictionMode) (
 	case 0, 3:
 		i1 = 1
 	default:
-		return 0, errors.New("invalid chromaArrayType")
+		return 0, errInvalidCAT
 	}
 
 	// CodeNum from readUe selects second index.
 	i2, err := readUe(r)
 	if err != nil {
 		return 0, errors.Wrap(err, "error from readUe")
+	}
+
+	// Need to check that we won't go out of bounds with this index.
+	if i2 >= len(codedBlockPattern[i1]) {
+		return 0, errInvalidCodeNum
 	}
 
 	// Macroblock prediction mode selects third index.
@@ -124,11 +129,18 @@ func readMe(r bitio.Reader, chromaArrayType int, mpm macroblockPredictionMode) (
 	case inter:
 		i3 = 1
 	default:
-		return 0, errors.New("invalid macroblock prediction mode")
+		return 0, errInvalidMPM
 	}
 
 	return codedBlockPattern[i1][i2][i3], nil
 }
+
+// Errors used by readMe.
+var (
+	errInvalidCodeNum = errors.New("invalid codeNum")
+	errInvalidMPM     = errors.New("invalid macroblock prediction mode")
+	errInvalidCAT     = errors.New("invalid chroma array type")
+)
 
 // TODO: this should probably go in a separate consts file like consts.go or something
 // like common.go.

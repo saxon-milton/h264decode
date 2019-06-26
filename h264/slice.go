@@ -769,7 +769,7 @@ func NewSliceData(sliceContext *SliceContext, b *BitReader) *SliceData {
 					} else {
 						me, _ := readMe(
 							nil,
-							sliceContext.Slice.Header.ChromaArrayType,
+							uint(sliceContext.Slice.Header.ChromaArrayType),
 							// TODO: fix this
 							//MbPartPredMode(sliceContext.Slice.Data, sliceContext.Slice.Data.SliceTypeName, sliceContext.Slice.Data.MbType, 0)))
 							0)

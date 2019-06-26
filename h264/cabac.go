@@ -6,68 +6,6 @@ const (
 	MbAddrNotAvailable = 10000
 )
 
-// G.7.4.3.4 via G.7.3.3.4 via 7.3.2.13 for NalUnitType 20 or 21
-// refLayerMbWidthC is equal to MbWidthC for the reference layer representation
-func RefMbW(chromaFlag, refLayerMbWidthC int) int {
-	if chromaFlag == 0 {
-		return 16
-	}
-	return refLayerMbWidthC
-}
-
-// refLayerMbHeightC is equal to MbHeightC for the reference layer representation
-func RefMbH(chromaFlag, refLayerMbHeightC int) int {
-	if chromaFlag == 0 {
-		return 16
-	}
-	return refLayerMbHeightC
-}
-func XOffset(xRefMin16, refMbW int) int {
-	return (((xRefMin16 - 64) >> 8) << 4) - (refMbW >> 1)
-}
-func YOffset(yRefMin16, refMbH int) int {
-	return (((yRefMin16 - 64) >> 8) << 4) - (refMbH >> 1)
-}
-func MbWidthC(sps *SPS) int {
-	mbWidthC := 16 / SubWidthC(sps)
-	if sps.ChromaFormat == 0 || sps.UseSeparateColorPlane {
-		mbWidthC = 0
-	}
-	return mbWidthC
-}
-func MbHeightC(sps *SPS) int {
-	mbHeightC := 16 / SubHeightC(sps)
-	if sps.ChromaFormat == 0 || sps.UseSeparateColorPlane {
-		mbHeightC = 0
-	}
-	return mbHeightC
-}
-
-// G.8.6.2.2.2
-func Xr(x, xOffset, refMbW int) int {
-	return (x + xOffset) % refMbW
-}
-func Yr(y, yOffset, refMbH int) int {
-	return (y + yOffset) % refMbH
-}
-
-// G.8.6.2.2.2
-func Xd(xr, refMbW int) int {
-	if xr >= refMbW/2 {
-		return xr - refMbW
-	}
-	return xr + 1
-}
-func Yd(yr, refMbH int) int {
-	if yr >= refMbH/2 {
-		return yr - refMbH
-	}
-	return yr + 1
-}
-func Ya(yd, refMbH, signYd int) int {
-	return yd - (refMbH/2+1)*signYd
-}
-
 // 6.4.11.1
 func MbAddr(xd, yd, predPartWidth int) {
 	// TODO: Unfinished

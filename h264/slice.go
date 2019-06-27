@@ -5,6 +5,15 @@ import (
 	"math"
 )
 
+type sliceType uint8
+
+const (
+	sliceTypeI sliceType = itoa
+	sliceTypeP
+	sliceTypeSP
+	sliceTypeB
+)
+
 type VideoStream struct {
 	SPS    *SPS
 	PPS    *PPS

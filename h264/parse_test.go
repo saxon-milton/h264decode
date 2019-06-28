@@ -40,14 +40,14 @@ func TestReadUe(t *testing.T) {
 		{[]byte{0x16}, 10}, // Bit string: 0001011, codeNum: 10
 	}
 
-	for testn, test := range tests {
+	for i, test := range tests {
 		got, err := readUe(bitio.NewReader(bytes.NewReader(test.in)))
 		if err != nil {
 			t.Fatalf("did not expect error: %v from readUe", err)
 		}
 
 		if test.want != uint(got) {
-			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.want)
+			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", i, got, test.want)
 		}
 	}
 }
@@ -68,14 +68,14 @@ func TestReadTe(t *testing.T) {
 		{[]byte{0x30}, 0, 0, errReadTeBadX},
 	}
 
-	for testn, test := range tests {
+	for i, test := range tests {
 		got, err := readTe(bitio.NewReader(bytes.NewReader(test.in)), test.x)
 		if err != test.err {
-			t.Fatalf("did not get expected error for test: %v\nGot: %v\nWant: %v\n", testn, err, test.err)
+			t.Fatalf("did not get expected error for test: %v\nGot: %v\nWant: %v\n", i, err, test.err)
 		}
 
 		if test.want != uint(got) {
-			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.want)
+			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", i, got, test.want)
 		}
 	}
 }
@@ -98,14 +98,14 @@ func TestReadSe(t *testing.T) {
 		{[]byte{0x38}, -3},
 	}
 
-	for testn, test := range tests {
+	for i, test := range tests {
 		got, err := readSe(bitio.NewReader(bytes.NewReader(test.in)))
 		if err != nil {
 			t.Fatalf("did not expect error: %v from readSe", err)
 		}
 
 		if test.want != got {
-			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.want)
+			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", i, got, test.want)
 		}
 	}
 }
@@ -141,14 +141,14 @@ func TestReadMe(t *testing.T) {
 		{in, 0, 4, 0, errInvalidMPM},
 	}
 
-	for testn, test := range tests {
+	for i, test := range tests {
 		got, err := readMe(bitio.NewReader(bytes.NewReader(test.in)), test.cat, test.mpm)
 		if err != test.err {
-			t.Fatalf("did not expect to get error: %v for test: %v", err, testn)
+			t.Fatalf("did not expect to get error: %v for test: %v", err, i)
 		}
 
 		if test.want != got {
-			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.want)
+			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", i, got, test.want)
 		}
 	}
 }

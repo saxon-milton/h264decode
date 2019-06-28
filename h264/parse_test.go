@@ -24,8 +24,8 @@ func TestReadUe(t *testing.T) {
 	// tests has been derived from Table 9-2 in ITU-T H.H264, showing bit strings
 	// and corresponding codeNums.
 	tests := []struct {
-		in     []byte // The bitstring we wish to read.
-		expect uint   // The expected codeNum.
+		in   []byte // The bitstring we wish to read.
+		want uint   // The expected codeNum.
 	}{
 		{[]byte{0x80}, 0},  // Bit string: 1, codeNum: 0
 		{[]byte{0x40}, 1},  // Bit string: 010, codeNum: 1
@@ -43,11 +43,11 @@ func TestReadUe(t *testing.T) {
 	for testn, test := range tests {
 		got, err := readUe(bitio.NewReader(bytes.NewReader(test.in)))
 		if err != nil {
-			t.Fatalf("did not expect to get error: %v from readUe", err)
+			t.Fatalf("did not expect error: %v from readUe", err)
 		}
 
-		if test.expect != uint(got) {
-			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.expect)
+		if test.want != uint(got) {
+			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.want)
 		}
 	}
 }
@@ -57,10 +57,10 @@ func TestReadUe(t *testing.T) {
 // H.264 (04/2017)
 func TestReadTe(t *testing.T) {
 	tests := []struct {
-		in     []byte // The bitstring we will read.
-		x      uint   // The upper bound of the range.
-		expect uint   // Expected result from readTe.
-		err    error  // Expected error from readTe.
+		in   []byte // The bitstring we will read.
+		x    uint   // The upper bound of the range.
+		want uint   // Expected result from readTe.
+		err  error  // Expected error from readTe.
 	}{
 		{[]byte{0x30}, 1, 1, nil},
 		{[]byte{0x80}, 1, 0, nil},
@@ -74,8 +74,8 @@ func TestReadTe(t *testing.T) {
 			t.Fatalf("did not get expected error for test: %v\nGot: %v\nWant: %v\n", testn, err, test.err)
 		}
 
-		if test.expect != uint(got) {
-			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.expect)
+		if test.want != uint(got) {
+			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.want)
 		}
 	}
 }
@@ -86,8 +86,8 @@ func TestReadTe(t *testing.T) {
 func TestReadSe(t *testing.T) {
 	// tests has been derived from table 9-3 of the specifications.
 	tests := []struct {
-		in     []byte // Bitstring to read.
-		expect int    // Expected value from se(v) parsing process.
+		in   []byte // Bitstring to read.
+		want int    // Expected value from se(v) parsing process.
 	}{
 		{[]byte{0x80}, 0},
 		{[]byte{0x40}, 1},
@@ -101,11 +101,11 @@ func TestReadSe(t *testing.T) {
 	for testn, test := range tests {
 		got, err := readSe(bitio.NewReader(bytes.NewReader(test.in)))
 		if err != nil {
-			t.Fatalf("did not expect to get error: %v from readSe", err)
+			t.Fatalf("did not expect error: %v from readSe", err)
 		}
 
-		if test.expect != got {
-			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.expect)
+		if test.want != got {
+			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.want)
 		}
 	}
 }
@@ -118,11 +118,11 @@ func TestReadMe(t *testing.T) {
 	inErr := []byte{0x07, 0xe0} // Bit string: 0000 0111 111, codeNum: 62 (will give invalid codeNum err)
 
 	tests := []struct {
-		in     []byte // Input data.
-		cat    uint   // Chroma array..
-		mpm    macroblockPredictionMode
-		expect uint  // Expected result from readMe.
-		err    error // Expected value of err from readMe.
+		in   []byte // Input data.
+		cat  uint   // Chroma array..
+		mpm  macroblockPredictionMode
+		want uint  // Expected result from readMe.
+		err  error // Expected value of err from readMe.
 	}{
 		{in, 1, intra4x4, 29, nil},
 		{in, 1, intra8x8, 29, nil},
@@ -147,8 +147,8 @@ func TestReadMe(t *testing.T) {
 			t.Fatalf("did not expect to get error: %v for test: %v", err, testn)
 		}
 
-		if test.expect != got {
-			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.expect)
+		if test.want != got {
+			t.Errorf("did not get expected result for test: %v\nGot: %v\nWant: %v\n", testn, got, test.want)
 		}
 	}
 }

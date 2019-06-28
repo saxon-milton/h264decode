@@ -140,7 +140,7 @@ const (
 // codedBlockPattern contains data from table 9-4 in ITU-T H.264 (04/2017)
 // for mapping a chromaArrayType, codeNum and macroblock prediction mode to a
 // coded block pattern.
-var codedBlockPattern = [][][]uint{
+var codedBlockPattern = [][][2]uint{
 	// Table 9-4 (a) for ChromaArrayType = 1 or 2
 	{
 		{47, 0}, {31, 16}, {15, 1}, {0, 2}, {23, 4}, {27, 8}, {29, 32}, {30, 3},

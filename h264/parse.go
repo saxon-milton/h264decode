@@ -20,6 +20,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+type macroblockPredictionMode uint8
+
+const (
+	intra4x4 macroblockPredictionMode = iota
+	intra8x8
+	inter
+)
+
 // readUe parses a syntax element of ue(v) descriptor, i.e. an unsigned integer
 // Exp-Golomb-coded element using method as specified in section 9.1 of ITU-T H.264.
 //
@@ -125,16 +133,6 @@ var (
 	errInvalidCodeNum = errors.New("invalid codeNum")
 	errInvalidMPM     = errors.New("invalid macroblock prediction mode")
 	errInvalidCAT     = errors.New("invalid chroma array type")
-)
-
-// TODO: this should probably go in a separate consts file like consts.go or something
-// like common.go.
-type macroblockPredictionMode uint8
-
-const (
-	intra4x4 macroblockPredictionMode = iota
-	intra8x8
-	inter
 )
 
 // codedBlockPattern contains data from table 9-4 in ITU-T H.264 (04/2017)

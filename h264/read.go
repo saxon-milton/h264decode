@@ -78,7 +78,8 @@ func (h *H264Reader) Start() {
 		case NALU_TYPE_SLICE_NON_IDR_PICTURE:
 			videoStream := h.VideoStreams[len(h.VideoStreams)-1]
 			logger.Printf("info: frame number %d\n", len(videoStream.Slices))
-			sliceContext := NewSliceContext(videoStream, nalUnit, nalUnit.RBSP(), true)
+			// TODO: handle this error
+			sliceContext, _ := NewSliceContext(videoStream, nalUnit, nalUnit.RBSP(), true)
 			videoStream.Slices = append(videoStream.Slices, sliceContext)
 		}
 	}
